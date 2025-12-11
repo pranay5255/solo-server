@@ -21,12 +21,14 @@ def robo(
     record: bool = typer.Option(False, "--record", help="Record data for training (requires calibrated arms)"),
     train: bool = typer.Option(False, "--train", help="Train a model (requires recorded data)"),
     inference: bool = typer.Option(False, "--inference", help="Run inference on a pre-trained model"),
+    replay: bool = typer.Option(False, "--replay", help="Replay actions from a recorded dataset episode"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Automatically use saved settings if available"),
 ):
     """
     Robotics operations: motor setup, calibration, teleoperation, data recording, training, and inference
     """
     from solo.commands.robo import robo as _robo
-    _robo(motors, calibrate, teleop, record, train, inference)
+    _robo(motors, calibrate, teleop, record, train, inference, replay, yes)
 
 
 @app.command()

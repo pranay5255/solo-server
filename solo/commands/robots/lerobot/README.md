@@ -1,6 +1,6 @@
 ## LeRobot with Solo CLI:
 
-Use `solo robo` command to run a complete robotics workflow with LeRobot: motor setup, calibration, teleoperation, data recording, training, and inference.
+Use `solo robo` command to run a complete robotics workflow with LeRobot: motor setup, calibration, teleoperation, data recording, training, inference, and replay.
 
 ### Quick start
 
@@ -22,6 +22,21 @@ solo robo --train
 
 # 6) Run inference
 solo robo --inference
+
+# 7) Replay a recorded episode
+solo robo --replay
+```
+
+### Auto-use saved settings
+
+Use `--yes` or `-y` to automatically use previously saved settings without prompts:
+
+```bash
+solo robo --teleop -y
+solo robo --record --yes
+solo robo --train -y
+solo robo --inference --yes
+solo robo --replay -y
 ```
 
 ## How configuration and prompts work
@@ -181,6 +196,29 @@ solo robo --inference
 - If Teleop override is enabled, moving the leader arm temporarily overrides the policy.
 - Same keyboard controls apply as in recording (→/←/ESC) for session control.
 - If ports change, the tool can detect new ports and retry once.
+
+---
+
+## 7) Replay
+
+Replay actions from a previously recorded dataset episode on the follower arm. Useful for verifying recordings or demonstrating learned behaviors.
+
+```bash
+solo robo --replay
+```
+
+### Interactive flow
+- Reuse saved Replay settings or enter new ones.
+- Confirm `robot_type` and `follower_port`, and select `follower_id`.
+- Enter `dataset_repo_id` (defaults to the last recorded dataset if available).
+- Enter the episode number to replay.
+- Replay starts and the follower arm executes the recorded actions.
+
+### Tips/Notes
+- Only the follower arm is required (no leader arm needed).
+- The dataset can be local (`local/<name>`) or from HuggingFace Hub (`username/dataset`).
+- If the port changes, the tool can detect the new port and retry once.
+- Press Ctrl+C to stop replay at any time.
 
 ---
 

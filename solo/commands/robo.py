@@ -25,9 +25,11 @@ def robo(
     record: bool = typer.Option(False, "--record", help="Record data for training (requires calibrated arms)"),
     train: bool = typer.Option(False, "--train", help="Train a model (requires recorded data)"),
     inference: bool = typer.Option(False, "--inference", help="Run inference on a pre-trained model"),
+    replay: bool = typer.Option(False, "--replay", help="Replay actions from a recorded dataset episode"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Automatically use saved settings if available"),
 ):
     """
-    Robotics operations: motor setup, calibration, teleoperation, data recording, training, and inference
+    Robotics operations: motor setup, calibration, teleoperation, data recording, training, replay, and inference
     """
     # Load existing config
     config = {}
@@ -39,4 +41,4 @@ def robo(
             config = {}
     
     # Use LeRobot handler directly
-    lerobot.handle_lerobot(config, calibrate, motors, teleop, record, train, inference) 
+    lerobot.handle_lerobot(config, calibrate, motors, teleop, record, train, inference, replay, yes) 
