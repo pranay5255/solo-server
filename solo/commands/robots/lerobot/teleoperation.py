@@ -17,12 +17,12 @@ from solo.commands.robots.lerobot.ports import detect_arm_port, detect_and_retry
 from lerobot.scripts.lerobot_teleoperate import teleoperate, TeleoperateConfig
 from solo.commands.robots.lerobot.config import validate_lerobot_config
 
-def teleoperation(config: dict = None) -> bool:
+def teleoperation(config: dict = None, auto_use: bool = False) -> bool:
     leader_id = None
     follower_id = None
     camera_config = None
 
-    preconfigured = use_preconfigured_args(config, 'teleop', 'Teleoperation')
+    preconfigured = use_preconfigured_args(config, 'teleop', 'Teleoperation', auto_use=auto_use)
     if preconfigured:
         leader_port = preconfigured.get('leader_port')
         follower_port = preconfigured.get('follower_port')
@@ -30,7 +30,6 @@ def teleoperation(config: dict = None) -> bool:
         camera_config = preconfigured.get('camera_config')
         leader_id = preconfigured.get('leader_id')
         follower_id = preconfigured.get('follower_id')
-        typer.echo("✅ Using preconfigured teleoperation settings")
     
 
     if not preconfigured:

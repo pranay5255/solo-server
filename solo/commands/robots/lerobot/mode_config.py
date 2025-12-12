@@ -51,7 +51,7 @@ def save_mode_config(config: dict, mode: str, mode_config: Dict) -> None:
     
 
 
-def use_preconfigured_args(config: dict, mode: str, mode_name: str) -> Optional[Dict]:
+def use_preconfigured_args(config: dict, mode: str, mode_name: str, auto_use: bool = False) -> Optional[Dict]:
     """
     Check if preconfigured arguments exist for a mode and ask user if they want to use them.
     
@@ -59,6 +59,7 @@ def use_preconfigured_args(config: dict, mode: str, mode_name: str) -> Optional[
         config: Main configuration dictionary
         mode: Mode name (e.g., 'calibration', 'teleop', 'recording', 'training', 'inference')
         mode_name: Display name for the mode (e.g., 'Calibration', 'Teleoperation')
+        auto_use: If True, automatically use preconfigured settings without prompting
     
     Returns:
         Preconfigured arguments if user chooses to use them, None otherwise
@@ -75,15 +76,12 @@ def use_preconfigured_args(config: dict, mode: str, mode_name: str) -> Optional[
             else:
                 typer.echo(f"   • {key}: {value}")
         
-        use_preconfigured = Confirm.ask(
-            f"Would you like to use these preconfigured {mode_name} settings?",
-            default=True
-        )
-        
-        if use_preconfigured:
+        # If auto_use is True, skip the prompt and use configs directly
+        if auto_use:
+            typer.echo(f"\n✅ Using preconfigured {mode_name} settings")
             return mode_config
         else:
-            typer.echo(f"🔄 Running {mode_name} with new settings")
+            typer.echo(f"\nRunning {mode_name} with new settings, or use -y to automatically use preconfigured settings")
             return None
     
     return None
@@ -150,3 +148,17 @@ def save_inference_config(config: dict, inference_args: Dict) -> None:
         'use_teleoperation': inference_args.get('use_teleoperation')
     }
     save_mode_config(config, 'inference', inference_config)
+
+
+def save_replay_config(config: dict, replay_args: Dict) -> None:
+    """Save replay-specific configuration."""
+    replay_config = {
+        'robot_type': replay_args.get('robot_type'),
+        'follower_port': replay_args.get('follower_port'),
+        'follower_id': replay_args.get('follower_id'),
+        'dataset_repo_id': replay_args.get('dataset_repo_id'),
+        'episode': replay_args.get('episode'),
+        'fps': replay_args.get('fps'),
+        'play_sounds': replay_args.get('play_sounds')
+    }
+    save_mode_config(config, 'replay', replay_config)

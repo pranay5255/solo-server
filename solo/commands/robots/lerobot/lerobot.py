@@ -9,7 +9,7 @@ from rich.console import Console
 
 console = Console()
 
-def handle_lerobot(config: dict, calibrate: str, motors: str, teleop: bool, record: bool, train: bool, inference: bool = False):
+def handle_lerobot(config: dict, calibrate: str, motors: str, teleop: bool, record: bool, train: bool, inference: bool = False, replay: bool = False, auto_use: bool = False):
     """Handle LeRobot framework operations"""
     # Check LeRobot installation
     import lerobot
@@ -17,18 +17,22 @@ def handle_lerobot(config: dict, calibrate: str, motors: str, teleop: bool, reco
     if train:
         # Training mode - train a policy on recorded data
         from solo.commands.robots.lerobot.recording import training_mode
-        training_mode(config)
+        training_mode(config, auto_use)
     elif record:
         # Recording mode - check for existing calibration and setup recording
         from solo.commands.robots.lerobot.recording import recording_mode
-        recording_mode(config)
+        recording_mode(config, auto_use)
     elif inference:
         # Inference mode - run pretrained policy on robot
         from solo.commands.robots.lerobot.recording import inference_mode
-        inference_mode(config)
+        inference_mode(config, auto_use)
+    elif replay:
+        # Replay mode - replay actions from a recorded dataset episode
+        from solo.commands.robots.lerobot.recording import replay_mode
+        replay_mode(config, auto_use)
     elif teleop:
         # Teleoperation mode - check for existing calibration
-        teleop_mode(config)
+        teleop_mode(config, auto_use)
     elif motors is not None:
         # Motor setup mode - setup motor IDs only
         motor_setup_mode(config, motors)
@@ -36,7 +40,7 @@ def handle_lerobot(config: dict, calibrate: str, motors: str, teleop: bool, reco
         # Calibration mode - calibrate only 
         calibration_mode(config, calibrate)
 
-def teleop_mode(config: dict):
+def teleop_mode(config: dict, auto_use: bool = False):
     """Handle LeRobot teleoperation mode"""
     # Lazy import - only load when teleop is actually used
     from solo.commands.robots.lerobot.teleoperation import teleoperation
@@ -44,7 +48,7 @@ def teleop_mode(config: dict):
     typer.echo("🎮 Starting LeRobot teleoperation mode...")
         
     # Start teleoperation
-    success = teleoperation(config)
+    success = teleoperation(config, auto_use)
     if success:
         typer.echo("✅ Teleoperation completed.")
     else:

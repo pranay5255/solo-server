@@ -168,6 +168,13 @@ solo robo --train
 
 # Inference with a hub model id (with optional Teleop override)
 solo robo --inference
+
+# Replay a recorded episode
+solo robo --replay
+
+# Use -y or --yes to auto-use saved settings (skip prompts)
+solo robo --teleop -y
+solo robo --record --yes
 ```
 
 ## API Reference
