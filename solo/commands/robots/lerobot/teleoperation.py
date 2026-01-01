@@ -11,9 +11,12 @@ from solo.commands.robots.lerobot.config import (
     create_follower_config,
     get_known_ids,
     save_lerobot_config,
+    is_bimanual_robot,
+    create_bimanual_leader_config,
+    create_bimanual_follower_config,
 )
 from solo.commands.robots.lerobot.mode_config import use_preconfigured_args
-from solo.commands.robots.lerobot.ports import detect_arm_port, detect_and_retry_ports
+from solo.commands.robots.lerobot.ports import detect_arm_port, detect_and_retry_ports, detect_bimanual_arm_ports
 from lerobot.scripts.lerobot_teleoperate import teleoperate, TeleoperateConfig
 from solo.commands.robots.lerobot.config import validate_lerobot_config
 
@@ -39,17 +42,43 @@ def teleoperation(config: dict = None, auto_use: bool = False) -> bool:
         if not robot_type:
             # Ask for robot type
             typer.echo("\n🤖 Select your robot type:")
-            typer.echo("1. SO100")
-            typer.echo("2. SO101")
-            robot_choice = int(Prompt.ask("Enter robot type", default="2"))
-            robot_type = "so100" if robot_choice == 1 else "so101"
+            typer.echo("1. SO100 (single arm)")
+            typer.echo("2. SO101 (single arm)")
+            typer.echo("3. Bimanual SO100")
+            typer.echo("4. Bimanual SO101")
+            robot_choice = int(Prompt.ask("Enter robot type", default="1"))
+            robot_type_map = {
+                1: "so100",
+                2: "so101",
+                3: "bi_so100",
+                4: "bi_so101"
+            }
+            robot_type = robot_type_map.get(robot_choice, "so100")
             config['robot_type'] = robot_type
-        if not leader_port:
-            leader_port = detect_arm_port("leader")
-            config['leader_port'] = leader_port
-        if not follower_port:
-            follower_port = detect_arm_port("follower")
-            config['follower_port'] = follower_port
+        
+        # Check if bimanual and handle port detection accordingly
+        if is_bimanual_robot(robot_type):
+            lerobot_config = config.get('lerobot', {})
+            left_leader_port = lerobot_config.get('left_leader_port')
+            right_leader_port = lerobot_config.get('right_leader_port')
+            left_follower_port = lerobot_config.get('left_follower_port')
+            right_follower_port = lerobot_config.get('right_follower_port')
+            
+            if not left_leader_port or not right_leader_port:
+                left_leader_port, right_leader_port = detect_bimanual_arm_ports("leader")
+                config['left_leader_port'] = left_leader_port
+                config['right_leader_port'] = right_leader_port
+            if not left_follower_port or not right_follower_port:
+                left_follower_port, right_follower_port = detect_bimanual_arm_ports("follower")
+                config['left_follower_port'] = left_follower_port
+                config['right_follower_port'] = right_follower_port
+        else:
+            if not leader_port:
+                leader_port = detect_arm_port("leader")
+                config['leader_port'] = leader_port
+            if not follower_port:
+                follower_port = detect_arm_port("follower")
+                config['follower_port'] = follower_port
     
         # Prompt/select ids if not provided
         known_leader_ids, known_follower_ids = get_known_ids(config)
@@ -86,18 +115,44 @@ def teleoperation(config: dict = None, auto_use: bool = False) -> bool:
         if leader_config_class is None or follower_config_class is None:
             typer.echo(f"❌ Unsupported robot type for teleoperation: {robot_type}")
             return False
-            
-        # Create configurations
-        leader_config = leader_config_class(port=leader_port, id=leader_id)
         
-        # Create robot config with cameras if enabled
-        follower_config = create_follower_config(
-            follower_config_class,
-            follower_port,
-            robot_type,
-            camera_config,
-            follower_id=follower_id,
-        )
+        # Create configurations based on whether bimanual or not
+        if is_bimanual_robot(robot_type):
+            # Create bimanual configurations
+            lerobot_config = config.get('lerobot', {})
+            left_leader_port = lerobot_config.get('left_leader_port')
+            right_leader_port = lerobot_config.get('right_leader_port')
+            left_follower_port = lerobot_config.get('left_follower_port')
+            right_follower_port = lerobot_config.get('right_follower_port')
+            
+            leader_config = create_bimanual_leader_config(
+                leader_config_class,
+                left_leader_port,
+                right_leader_port,
+                robot_type,
+                leader_id=leader_id
+            )
+            
+            follower_config = create_bimanual_follower_config(
+                follower_config_class,
+                left_follower_port,
+                right_follower_port,
+                robot_type,
+                camera_config,
+                follower_id=follower_id
+            )
+        else:
+            # Create single-arm configurations
+            leader_config = leader_config_class(port=leader_port, id=leader_id)
+            
+            # Create robot config with cameras if enabled
+            follower_config = create_follower_config(
+                follower_config_class,
+                follower_port,
+                robot_type,
+                camera_config,
+                follower_id=follower_id,
+            )
         
         # Create teleoperation config
         teleop_config = TeleoperateConfig(
@@ -110,18 +165,27 @@ def teleoperation(config: dict = None, auto_use: bool = False) -> bool:
         # Save configuration before execution (if not using preconfigured settings)
         if config and not preconfigured:
             from .mode_config import save_teleop_config
-            save_teleop_config(
-                config,
-                leader_port,
-                follower_port,
-                robot_type,
-                camera_config,
-                leader_id,
-                follower_id,
-            )
+            if is_bimanual_robot(robot_type):
+                # For bimanual, we don't use the standard save_teleop_config
+                # Configuration is already saved via save_lerobot_config
+                pass
+            else:
+                save_teleop_config(
+                    config,
+                    leader_port,
+                    follower_port,
+                    robot_type,
+                    camera_config,
+                    leader_id,
+                    follower_id,
+                )
         
-        typer.echo("🎮 Starting teleoperation... Press Ctrl+C to stop.")
-        typer.echo("📋 Move the leader arm to control the follower arm.")
+        if is_bimanual_robot(robot_type):
+            typer.echo("🎮 Starting bimanual teleoperation... Press Ctrl+C to stop.")
+            typer.echo("📋 Move BOTH leader arms to control BOTH follower arms.")
+        else:
+            typer.echo("🎮 Starting teleoperation... Press Ctrl+C to stop.")
+            typer.echo("📋 Move the leader arm to control the follower arm.")
         
         # Start teleoperation with retry logic
         max_retries = 1

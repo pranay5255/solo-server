@@ -81,8 +81,22 @@ def get_robot_config_classes(robot_type: str) -> Tuple[Optional[type], Optional[
         from lerobot.teleoperators.so101_leader import SO101LeaderConfig
         from lerobot.robots.so101_follower import SO101FollowerConfig
         return SO101LeaderConfig, SO101FollowerConfig
+    elif robot_type == "bi_so100":
+        from lerobot.teleoperators.bi_so100_leader import BiSO100LeaderConfig
+        from lerobot.robots.bi_so100_follower import BiSO100FollowerConfig
+        return BiSO100LeaderConfig, BiSO100FollowerConfig
+    elif robot_type == "bi_so101":
+        # Future support - would need BiSO101Leader/Follower classes in lerobot
+        # For now, return None to indicate unsupported
+        typer.echo("⚠️  bi_so101 support coming soon!")
+        return None, None
     else:
         return None, None
+
+
+def is_bimanual_robot(robot_type: str) -> bool:
+    """Check if robot type is bimanual"""
+    return robot_type in ["bi_so100", "bi_so101"]
 
 
 def normalize_fps(requested_fps: float) -> int:
@@ -155,7 +169,7 @@ def create_follower_config(
     follower_id: Optional[str] = None,
 ):
     """
-    Create follower configuration with optional camera support
+    Create follower configuration with optional camera support (single-arm robots)
     """
     cameras_dict = build_camera_configuration(camera_config or {})
     
@@ -167,6 +181,44 @@ def create_follower_config(
         )
     else:
         return follower_config_class(port=follower_port, id=follower_id or f"{robot_type}_follower")
+
+
+def create_bimanual_leader_config(
+    leader_config_class,
+    left_leader_port: str,
+    right_leader_port: str,
+    robot_type: str,
+    leader_id: Optional[str] = None,
+):
+    """
+    Create bimanual leader configuration
+    """
+    return leader_config_class(
+        left_arm_port=left_leader_port,
+        right_arm_port=right_leader_port,
+        id=leader_id or f"{robot_type}_leader"
+    )
+
+
+def create_bimanual_follower_config(
+    follower_config_class,
+    left_follower_port: str,
+    right_follower_port: str,
+    robot_type: str,
+    camera_config: Dict = None,
+    follower_id: Optional[str] = None,
+):
+    """
+    Create bimanual follower configuration with optional camera support
+    """
+    cameras_dict = build_camera_configuration(camera_config or {})
+    
+    return follower_config_class(
+        left_arm_port=left_follower_port,
+        right_arm_port=right_follower_port,
+        id=follower_id or f"{robot_type}_follower",
+        cameras=cameras_dict if cameras_dict else {}
+    )
 
 
 def create_robot_configs(

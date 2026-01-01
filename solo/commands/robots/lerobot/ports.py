@@ -127,6 +127,37 @@ def detect_arm_port(arm_type: str) -> Optional[str]:
             return new_ports[0]
 
 
+def detect_bimanual_arm_ports(arm_type: str) -> tuple[Optional[str], Optional[str]]:
+    """
+    Detect ports for bimanual arm (left and right)
+    Returns (left_port, right_port)
+    """
+    typer.echo(f"\n🔍 Detecting ports for bimanual {arm_type} arms...")
+    typer.echo(f"⚠️  You'll need to connect TWO {arm_type} arms: LEFT and RIGHT")
+    
+    # Detect left arm
+    typer.echo(f"\n👈 First, let's detect the LEFT {arm_type} arm...")
+    left_port = detect_arm_port(f"left {arm_type}")
+    
+    if not left_port:
+        typer.echo(f"❌ Failed to detect left {arm_type} arm")
+        return None, None
+    
+    # Detect right arm
+    typer.echo(f"\n👉 Now, let's detect the RIGHT {arm_type} arm...")
+    right_port = detect_arm_port(f"right {arm_type}")
+    
+    if not right_port:
+        typer.echo(f"❌ Failed to detect right {arm_type} arm")
+        return left_port, None
+    
+    typer.echo(f"\n✅ Detected bimanual {arm_type} arms:")
+    typer.echo(f"   • Left {arm_type}: {left_port}")
+    typer.echo(f"   • Right {arm_type}: {right_port}")
+    
+    return left_port, right_port
+
+
 def detect_and_retry_ports(leader_port: str, follower_port: str, config: dict = None) -> tuple[str, str]:
     """
     Detect new ports if connection fails and update config
