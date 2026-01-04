@@ -1476,9 +1476,6 @@ def replay_mode(config: dict, auto_use: bool = False):
                             else:
                                 typer.echo("❌ Could not find new port. Please check connections.")
                                 return
-                        else:
-                            typer.echo("❌ Could not find new port. Please check connections.")
-                            return
                     else:
                         typer.echo(f"❌ Replay failed after retry: {error_msg}")
                         return
