@@ -11,13 +11,17 @@ import os
 import glob
 import re
 
-from solo.commands.robots.lerobot.config import validate_lerobot_config, create_robot_configs, get_known_ids, save_lerobot_config, get_robot_config_classes, create_follower_config
+from solo.commands.robots.lerobot.config import (
+    validate_lerobot_config, create_robot_configs, get_known_ids, save_lerobot_config, 
+    get_robot_config_classes, create_follower_config, is_bimanual_robot,
+    create_bimanual_leader_config, create_bimanual_follower_config
+)
 from solo.commands.robots.lerobot.calibration import display_calibration_error, display_arms_status
 from solo.commands.robots.lerobot.auth import authenticate_huggingface
 from solo.commands.robots.lerobot.dataset import check_dataset_exists, handle_existing_dataset, normalize_repo_id
 from solo.commands.robots.lerobot.cameras import setup_cameras
 from solo.commands.robots.lerobot.mode_config import use_preconfigured_args
-from solo.commands.robots.lerobot.ports import detect_arm_port, detect_and_retry_ports
+from solo.commands.robots.lerobot.ports import detect_arm_port, detect_and_retry_ports, detect_bimanual_arm_ports
 
 
 def clean_ansi_codes(text: str) -> str:
@@ -119,20 +123,55 @@ def unified_record_config(
     """
     Create a unified record configuration for both inference and recording modes.
     Uses the same underlying lerobot record infrastructure.
+    Supports both single-arm and bimanual robots.
     """
     # Import lerobot components
     from lerobot.scripts.lerobot_record import RecordConfig, DatasetRecordConfig
     from lerobot.configs.policies import PreTrainedConfig
     
-    # Create robot configurations
-    leader_config, follower_config = create_robot_configs(
-        robot_type,
-        leader_port,
-        follower_port,
-        camera_config,
-        leader_id=mode_specific_kwargs.get('leader_id'),
-        follower_id=mode_specific_kwargs.get('follower_id'),
-    )
+    # Check if bimanual robot
+    if is_bimanual_robot(robot_type):
+        # Bimanual configuration
+        leader_config_class, follower_config_class = get_robot_config_classes(robot_type)
+        
+        if leader_config_class is None or follower_config_class is None:
+            raise ValueError(f"Unsupported bimanual robot type: {robot_type}")
+        
+        # Get bimanual ports from kwargs
+        left_leader_port = mode_specific_kwargs.get('left_leader_port')
+        right_leader_port = mode_specific_kwargs.get('right_leader_port')
+        left_follower_port = mode_specific_kwargs.get('left_follower_port')
+        right_follower_port = mode_specific_kwargs.get('right_follower_port')
+        
+        if not all([left_leader_port, right_leader_port, left_follower_port, right_follower_port]):
+            raise ValueError("Bimanual robots require all 4 ports: left_leader, right_leader, left_follower, right_follower")
+        
+        leader_config = create_bimanual_leader_config(
+            leader_config_class,
+            left_leader_port,
+            right_leader_port,
+            robot_type,
+            leader_id=mode_specific_kwargs.get('leader_id')
+        )
+        
+        follower_config = create_bimanual_follower_config(
+            follower_config_class,
+            left_follower_port,
+            right_follower_port,
+            robot_type,
+            camera_config,
+            follower_id=mode_specific_kwargs.get('follower_id')
+        )
+    else:
+        # Single-arm configuration
+        leader_config, follower_config = create_robot_configs(
+            robot_type,
+            leader_port,
+            follower_port,
+            camera_config,
+            leader_id=mode_specific_kwargs.get('leader_id'),
+            follower_id=mode_specific_kwargs.get('follower_id'),
+        )
     
     if follower_config is None:
         raise ValueError(f"Failed to create robot configuration for {robot_type}")
@@ -301,17 +340,45 @@ def recording_mode(config: dict, auto_use: bool = False):
         if not robot_type:
             # Ask for robot type
             typer.echo("\n🤖 Select your robot type:")
-            typer.echo("1. SO100")
-            typer.echo("2. SO101")
-            robot_choice = int(Prompt.ask("Enter robot type", default="2"))
-            robot_type = "so100" if robot_choice == 1 else "so101"
+            typer.echo("1. SO100 (single arm)")
+            typer.echo("2. SO101 (single arm)")
+            typer.echo("3. Bimanual SO100")
+            typer.echo("4. Bimanual SO101")
+            robot_choice = int(Prompt.ask("Enter robot type", default="1"))
+            robot_type_map = {
+                1: "so100",
+                2: "so101",
+                3: "bi_so100",
+                4: "bi_so101"
+            }
+            robot_type = robot_type_map.get(robot_choice, "so100")
             config['robot_type'] = robot_type
-        if not leader_port:
-            leader_port = detect_arm_port("leader")
-            config['leader_port'] = leader_port
-        if not follower_port:
-            follower_port = detect_arm_port("follower")
-            config['follower_port'] = follower_port
+        
+        # Handle port detection based on robot type
+        if is_bimanual_robot(robot_type):
+            # Bimanual port detection
+            lerobot_config = config.get('lerobot', {})
+            left_leader_port = lerobot_config.get('left_leader_port')
+            right_leader_port = lerobot_config.get('right_leader_port')
+            left_follower_port = lerobot_config.get('left_follower_port')
+            right_follower_port = lerobot_config.get('right_follower_port')
+            
+            if not left_leader_port or not right_leader_port:
+                left_leader_port, right_leader_port = detect_bimanual_arm_ports("leader")
+                config['left_leader_port'] = left_leader_port
+                config['right_leader_port'] = right_leader_port
+            if not left_follower_port or not right_follower_port:
+                left_follower_port, right_follower_port = detect_bimanual_arm_ports("follower")
+                config['left_follower_port'] = left_follower_port
+                config['right_follower_port'] = right_follower_port
+        else:
+            # Single-arm port detection
+            if not leader_port:
+                leader_port = detect_arm_port("leader")
+                config['leader_port'] = leader_port
+            if not follower_port:
+                follower_port = detect_arm_port("follower")
+                config['follower_port'] = follower_port
         
         # Select ids
         known_leader_ids, known_follower_ids = get_known_ids(config)
@@ -429,22 +496,34 @@ def recording_mode(config: dict, auto_use: bool = False):
     try:
         
         # Create unified record configuration for recording mode
-        record_config = unified_record_config(
-            robot_type=robot_type,
-            leader_port=leader_port,
-            follower_port=follower_port,
-            camera_config=camera_config,
-            mode="recording",
-            leader_id=leader_id,
-            follower_id=follower_id,
-            dataset_repo_id=dataset_repo_id,
-            task_description=task_description,
-            episode_time=episode_time,
-            num_episodes=num_episodes,
-            push_to_hub=push_to_hub,
-            fps=30,
-            should_resume=should_resume,
-        )
+        record_config_kwargs = {
+            'robot_type': robot_type,
+            'leader_port': leader_port,
+            'follower_port': follower_port,
+            'camera_config': camera_config,
+            'mode': "recording",
+            'leader_id': leader_id,
+            'follower_id': follower_id,
+            'dataset_repo_id': dataset_repo_id,
+            'task_description': task_description,
+            'episode_time': episode_time,
+            'num_episodes': num_episodes,
+            'push_to_hub': push_to_hub,
+            'fps': 30,
+            'should_resume': should_resume,
+        }
+        
+        # Add bimanual ports if bimanual robot
+        if is_bimanual_robot(robot_type):
+            lerobot_config = config.get('lerobot', {})
+            record_config_kwargs.update({
+                'left_leader_port': lerobot_config.get('left_leader_port'),
+                'right_leader_port': lerobot_config.get('right_leader_port'),
+                'left_follower_port': lerobot_config.get('left_follower_port'),
+                'right_follower_port': lerobot_config.get('right_follower_port'),
+            })
+        
+        record_config = unified_record_config(**record_config_kwargs)
         
         mode_text = "Resuming" if should_resume else "Starting"
         typer.echo(f"🎬 {mode_text} recording... Follow the on-screen instructions.")
@@ -491,22 +570,36 @@ def recording_mode(config: dict, auto_use: bool = False):
                         if new_leader_port != leader_port or new_follower_port != follower_port:
                             # Update ports and recreate config
                             leader_port, follower_port = new_leader_port, new_follower_port
-                            record_config = unified_record_config(
-                                robot_type=robot_type,
-                                leader_port=leader_port,
-                                follower_port=follower_port,
-                                camera_config=camera_config,
-                                mode="recording",
-                                leader_id=leader_id,
-                                follower_id=follower_id,
-                                dataset_repo_id=dataset_repo_id,
-                                task_description=task_description,
-                                episode_time=episode_time,
-                                num_episodes=num_episodes,
-                                push_to_hub=push_to_hub,
-                                fps=30,
-                                should_resume=should_resume,
-                            )
+                            
+                            # Build config kwargs
+                            retry_config_kwargs = {
+                                'robot_type': robot_type,
+                                'leader_port': leader_port,
+                                'follower_port': follower_port,
+                                'camera_config': camera_config,
+                                'mode': "recording",
+                                'leader_id': leader_id,
+                                'follower_id': follower_id,
+                                'dataset_repo_id': dataset_repo_id,
+                                'task_description': task_description,
+                                'episode_time': episode_time,
+                                'num_episodes': num_episodes,
+                                'push_to_hub': push_to_hub,
+                                'fps': 30,
+                                'should_resume': should_resume,
+                            }
+                            
+                            # Add bimanual ports if bimanual robot
+                            if is_bimanual_robot(robot_type):
+                                lerobot_config = config.get('lerobot', {})
+                                retry_config_kwargs.update({
+                                    'left_leader_port': lerobot_config.get('left_leader_port'),
+                                    'right_leader_port': lerobot_config.get('right_leader_port'),
+                                    'left_follower_port': lerobot_config.get('left_follower_port'),
+                                    'right_follower_port': lerobot_config.get('right_follower_port'),
+                                })
+                            
+                            record_config = unified_record_config(**retry_config_kwargs)
                             typer.echo("🔄 Retrying recording with new ports...")
                             continue
                         else:
@@ -1197,13 +1290,34 @@ def replay_mode(config: dict, auto_use: bool = False):
         
         if not robot_type:
             typer.echo("\n🤖 Select your robot type:")
-            typer.echo("1. SO100")
-            typer.echo("2. SO101")
-            robot_choice = int(Prompt.ask("Enter robot type", default="2"))
-            robot_type = "so100" if robot_choice == 1 else "so101"
+            typer.echo("1. SO100 (single arm)")
+            typer.echo("2. SO101 (single arm)")
+            typer.echo("3. Bimanual SO100")
+            typer.echo("4. Bimanual SO101")
+            robot_choice = int(Prompt.ask("Enter robot type", default="1"))
+            robot_type_map = {
+                1: "so100",
+                2: "so101",
+                3: "bi_so100",
+                4: "bi_so101"
+            }
+            robot_type = robot_type_map.get(robot_choice, "so100")
         
-        if not follower_port:
-            follower_port = detect_arm_port("follower")
+        # Handle port detection based on robot type
+        if is_bimanual_robot(robot_type):
+            # Bimanual port detection
+            lerobot_config = config.get('lerobot', {})
+            left_follower_port = lerobot_config.get('left_follower_port')
+            right_follower_port = lerobot_config.get('right_follower_port')
+            
+            if not left_follower_port or not right_follower_port:
+                left_follower_port, right_follower_port = detect_bimanual_arm_ports("follower")
+                config['left_follower_port'] = left_follower_port
+                config['right_follower_port'] = right_follower_port
+        else:
+            # Single-arm port detection
+            if not follower_port:
+                follower_port = detect_arm_port("follower")
         
         # Get follower ID
         _, known_follower_ids = get_known_ids(config)
@@ -1252,7 +1366,27 @@ def replay_mode(config: dict, auto_use: bool = False):
         if not follower_config_class:
             raise ValueError(f"Unsupported robot type: {robot_type}")
         
-        follower_config = create_follower_config(follower_config_class, follower_port, robot_type, follower_id=follower_id)
+        # Create follower config based on robot type
+        if is_bimanual_robot(robot_type):
+            lerobot_config = config.get('lerobot', {})
+            left_follower_port = lerobot_config.get('left_follower_port')
+            right_follower_port = lerobot_config.get('right_follower_port')
+            
+            follower_config = create_bimanual_follower_config(
+                follower_config_class,
+                left_follower_port,
+                right_follower_port,
+                robot_type,
+                camera_config=None,
+                follower_id=follower_id
+            )
+        else:
+            follower_config = create_follower_config(
+                follower_config_class,
+                follower_port,
+                robot_type,
+                follower_id=follower_id
+            )
         
         # Load dataset
         dataset = LeRobotDataset(dataset_repo_id, episodes=[episode])
@@ -1292,26 +1426,56 @@ def replay_mode(config: dict, auto_use: bool = False):
                         typer.echo(f"❌ Connection failed: {error_msg}")
                         typer.echo("🔄 Attempting to detect new port...")
                         
-                        # Detect new follower port
-                        new_follower_port = detect_arm_port("follower")
-                        
-                        if new_follower_port and new_follower_port != follower_port:
-                            follower_port = new_follower_port
-                            typer.echo(f"✅ Found new follower port: {follower_port}")
+                        # Detect new follower port(s)
+                        if is_bimanual_robot(robot_type):
+                            left_follower_port, right_follower_port = detect_bimanual_arm_ports("follower")
                             
-                            # Save updated port to main lerobot config (shared across all modes)
-                            save_lerobot_config(config, {'follower_port': follower_port})
+                            if left_follower_port and right_follower_port:
+                                typer.echo(f"✅ Found new follower ports: {left_follower_port}, {right_follower_port}")
+                                
+                                # Save updated ports to main lerobot config
+                                save_lerobot_config(config, {
+                                    'left_follower_port': left_follower_port,
+                                    'right_follower_port': right_follower_port
+                                })
+                                
+                                # Recreate follower config
+                                follower_config = create_bimanual_follower_config(
+                                    follower_config_class,
+                                    left_follower_port,
+                                    right_follower_port,
+                                    robot_type,
+                                    camera_config=None,
+                                    follower_id=follower_id
+                                )
+                                typer.echo("🔄 Retrying replay with new ports...")
+                                continue
+                            else:
+                                typer.echo("❌ Could not find new ports. Please check connections.")
+                                return
+                        else:
+                            new_follower_port = detect_arm_port("follower")
                             
-                            # Save updated port to replay config
-                            from .mode_config import save_replay_config
-                            save_replay_config(config, {
-                                'robot_type': robot_type, 'follower_port': follower_port, 'follower_id': follower_id,
-                                'dataset_repo_id': dataset_repo_id, 'episode': episode, 'fps': fps, 'play_sounds': play_sounds
-                            })
-                            
-                            follower_config = create_follower_config(follower_config_class, follower_port, robot_type, follower_id=follower_id)
-                            typer.echo("🔄 Retrying replay with new port...")
-                            continue
+                            if new_follower_port and new_follower_port != follower_port:
+                                follower_port = new_follower_port
+                                typer.echo(f"✅ Found new follower port: {follower_port}")
+                                
+                                # Save updated port to main lerobot config (shared across all modes)
+                                save_lerobot_config(config, {'follower_port': follower_port})
+                                
+                                # Save updated port to replay config
+                                from .mode_config import save_replay_config
+                                save_replay_config(config, {
+                                    'robot_type': robot_type, 'follower_port': follower_port, 'follower_id': follower_id,
+                                    'dataset_repo_id': dataset_repo_id, 'episode': episode, 'fps': fps, 'play_sounds': play_sounds
+                                })
+                                
+                                follower_config = create_follower_config(follower_config_class, follower_port, robot_type, follower_id=follower_id)
+                                typer.echo("🔄 Retrying replay with new port...")
+                                continue
+                            else:
+                                typer.echo("❌ Could not find new port. Please check connections.")
+                                return
                         else:
                             typer.echo("❌ Could not find new port. Please check connections.")
                             return
