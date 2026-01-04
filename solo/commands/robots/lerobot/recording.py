@@ -406,24 +406,20 @@ def recording_mode(config: dict, auto_use: bool = False):
             if not login_success:
                 typer.echo("❌ HuggingFace authentication failed. Continuing in local-only mode.")
                 push_to_hub = False
-        else:
-            # Even if not pushing to hub, get username for proper repo_id formatting
-            from solo.commands.robots.lerobot.auth import get_stored_credentials
-            stored_username, _ = get_stored_credentials()
-            if stored_username:
-                hf_username = stored_username
+                hf_username = None  # Clear username for local-only mode
         
         # Step 2: Get recording parameters
         typer.echo("\n⚙️ Step 2: Recording Configuration")
         
         # Get dataset name and handle existing datasets
         dataset_name = Prompt.ask("Enter dataset repository name", default="lerobot-dataset")
-        # Use HuggingFace username if available, otherwise default to "local/" namespace
-        initial_repo_id = normalize_repo_id(dataset_name, hf_username=hf_username)
+        # Only use HuggingFace username if we're actually pushing to hub
+        username_for_format = hf_username if push_to_hub else None
+        initial_repo_id = normalize_repo_id(dataset_name, hf_username=username_for_format)
         # Check if dataset exists and handle appropriately
         dataset_repo_id, should_resume = handle_existing_dataset(initial_repo_id)
         # Ensure the returned id still has a namespace (user may have typed name-only)
-        dataset_repo_id = normalize_repo_id(dataset_repo_id, hf_username=hf_username)
+        dataset_repo_id = normalize_repo_id(dataset_repo_id, hf_username=username_for_format)
         # Clean ANSI escape codes to prevent file system errors
         dataset_repo_id = clean_ansi_codes(dataset_repo_id)
         
@@ -442,6 +438,13 @@ def recording_mode(config: dict, auto_use: bool = False):
                 # Use local format for local-only datasets
                 dataset_repo_id = f"local/{dataset_repo_id}"
                 typer.echo(f"🔧 Fixed dataset_repo_id format: '{dataset_repo_id}'")
+        
+        # Force local format when not pushing to hub
+        if not push_to_hub and not dataset_repo_id.startswith('local/'):
+            typer.echo(f"⚠️  Not pushing to hub - converting '{dataset_repo_id}' to local format")
+            dataset_name_only = dataset_repo_id.split('/')[-1]
+            dataset_repo_id = f"local/{dataset_name_only}"
+            typer.echo(f"🔧 Using local dataset: '{dataset_repo_id}'")
         
         # Get task description
         task_description = Prompt.ask("Enter task description (e.g., 'Pick up the red cube and place it in the box')")
