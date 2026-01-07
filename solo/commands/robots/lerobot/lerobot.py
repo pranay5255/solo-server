@@ -9,7 +9,7 @@ from rich.console import Console
 
 console = Console()
 
-def handle_lerobot(config: dict, calibrate: str, motors: str, teleop: bool, record: bool, train: bool, inference: bool = False, replay: bool = False, auto_use: bool = False):
+def handle_lerobot(config: dict, calibrate: str, motors: str, teleop: bool, record: bool, train: bool, inference: bool = False, replay: bool = False, auto_use: bool = False, replay_options: dict = None):
     """Handle LeRobot framework operations"""
     # Check LeRobot installation
     import lerobot
@@ -29,7 +29,7 @@ def handle_lerobot(config: dict, calibrate: str, motors: str, teleop: bool, reco
     elif replay:
         # Replay mode - replay actions from a recorded dataset episode
         from solo.commands.robots.lerobot.recording import replay_mode
-        replay_mode(config, auto_use)
+        replay_mode(config, auto_use, replay_options)
     elif teleop:
         # Teleoperation mode - check for existing calibration
         teleop_mode(config, auto_use)

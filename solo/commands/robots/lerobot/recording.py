@@ -1272,14 +1272,26 @@ def training_mode(config: dict, auto_use: bool = False):
         typer.echo("Please check your dataset and configuration.")
 
 
-def replay_mode(config: dict, auto_use: bool = False):
+def replay_mode(config: dict, auto_use: bool = False, replay_options: dict = None):
     """Handle LeRobot replay mode - replay actions from a recorded dataset episode"""
     typer.echo("🔄 Starting LeRobot replay mode...")
     
+    # Check if CLI arguments were provided (non-interactive mode)
+    if replay_options and replay_options.get('dataset'):
+        # Use CLI arguments
+        _, follower_port, _, _, robot_type = validate_lerobot_config(config)
+        follower_id = replay_options.get('follower_id')
+        dataset_repo_id = replay_options.get('dataset')
+        episode = replay_options.get('episode', 0)
+        fps = replay_options.get('fps', 30)
+        play_sounds = True
+        
+        typer.echo(f"📦 Dataset: {dataset_repo_id}")
+        typer.echo(f"📹 Episode: {episode}")
+        if follower_id:
+            typer.echo(f"🤖 Follower ID: {follower_id}")
     # Check for preconfigured replay settings
-    preconfigured = use_preconfigured_args(config, 'replay', 'Replay', auto_use=auto_use)
-    
-    if preconfigured and preconfigured.get('follower_port') and preconfigured.get('dataset_repo_id'):
+    elif (preconfigured := use_preconfigured_args(config, 'replay', 'Replay', auto_use=auto_use)) and preconfigured.get('follower_port') and preconfigured.get('dataset_repo_id'):
         robot_type = preconfigured.get('robot_type')
         follower_port = preconfigured.get('follower_port')
         follower_id = preconfigured.get('follower_id')

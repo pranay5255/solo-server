@@ -23,12 +23,17 @@ def robo(
     inference: bool = typer.Option(False, "--inference", help="Run inference on a pre-trained model"),
     replay: bool = typer.Option(False, "--replay", help="Replay actions from a recorded dataset episode"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Automatically use saved settings if available"),
+    # Replay-specific options (non-interactive)
+    dataset: Optional[str] = typer.Option(None, "--dataset", help="Dataset repository ID for replay (e.g., 'organize_fennel_seed')"),
+    episode: Optional[int] = typer.Option(None, "--episode", help="Episode number to replay (default: 0)"),
+    follower_id: Optional[str] = typer.Option(None, "--follower-id", help="Follower arm ID for replay (e.g., 'follower_right')"),
+    fps: Optional[int] = typer.Option(None, "--fps", help="Frames per second for replay (default: 30)"),
 ):
     """
-    Robotics operations: motor setup, calibration, teleoperation, data recording, training, and inference
+    Robotics operations: motor setup, calibration, teleoperation, data recording, training, replay, and inference
     """
     from solo.commands.robo import robo as _robo
-    _robo(motors, calibrate, teleop, record, train, inference, replay, yes)
+    _robo(motors, calibrate, teleop, record, train, inference, replay, yes, dataset, episode, follower_id, fps)
 
 
 @app.command()
