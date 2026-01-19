@@ -81,6 +81,10 @@ def get_robot_config_classes(robot_type: str) -> Tuple[Optional[type], Optional[
         from lerobot.teleoperators.so101_leader import SO101LeaderConfig
         from lerobot.robots.so101_follower import SO101FollowerConfig
         return SO101LeaderConfig, SO101FollowerConfig
+    elif robot_type == "koch":
+        from lerobot.teleoperators.koch_leader import KochLeaderConfig
+        from lerobot.robots.koch_follower import KochFollowerConfig
+        return KochLeaderConfig, KochFollowerConfig
     elif robot_type == "bi_so100":
         from lerobot.teleoperators.bi_so100_leader import BiSO100LeaderConfig
         from lerobot.robots.bi_so100_follower import BiSO100FollowerConfig

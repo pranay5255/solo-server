@@ -1,0 +1,75 @@
+# LeRobot USB Device Rules
+# This file provides udev rules for USB-to-serial adapters used with LeRobot-compatible robots
+# 
+# Supported robots:
+#   - Koch v1.0/v1.1 (Dynamixel motors)
+#   - SO100 (Feetech motors)
+#   - SO101 (Feetech motors)
+#   - Bimanual SO100/SO101
+#
+# Install with: sudo cp 99-lerobot.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules
+# Or use: solo setup-usb
+
+# =============================================================================
+# Dynamixel U2D2 Adapter (FTDI-based) - Used by Koch arms
+# =============================================================================
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6014", MODE="0666", GROUP="dialout"
+
+# =============================================================================
+# CH340/CH341 USB-to-Serial Adapters - Used by Waveshare boards (SO100/SO101)
+# These are the most common adapters for Feetech-based robot arms
+# =============================================================================
+# CH340 variants
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", MODE="0666", GROUP="dialout"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7522", MODE="0666", GROUP="dialout"
+# CH341 variants (common on Waveshare Serial Board)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="55d3", MODE="0666", GROUP="dialout"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="55d4", MODE="0666", GROUP="dialout"
+# CH9102 (newer CH340 variant)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="55d2", MODE="0666", GROUP="dialout"
+
+# =============================================================================
+# CP210x USB-to-Serial Adapters (Silicon Labs) - Alternative Feetech controllers
+# =============================================================================
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", MODE="0666", GROUP="dialout"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea61", MODE="0666", GROUP="dialout"
+
+# =============================================================================
+# FTDI USB-to-Serial Adapters - Used by Dynamixel and some generic boards
+# =============================================================================
+# FT232R
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", MODE="0666", GROUP="dialout"
+# FT232H
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6014", MODE="0666", GROUP="dialout"
+# FT2232
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6010", MODE="0666", GROUP="dialout"
+# FT4232
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6011", MODE="0666", GROUP="dialout"
+# FT230X
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6015", MODE="0666", GROUP="dialout"
+
+# =============================================================================
+# Prolific PL2303 - Common cheap USB-serial adapters
+# =============================================================================
+SUBSYSTEM=="tty", ATTRS{idVendor}=="067b", ATTRS{idProduct}=="2303", MODE="0666", GROUP="dialout"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="067b", ATTRS{idProduct}=="23a3", MODE="0666", GROUP="dialout"
+
+# =============================================================================
+# Arduino/Teensy boards - Sometimes used for motor control
+# =============================================================================
+# Arduino Uno/Mega (ATmega16U2)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2341", MODE="0666", GROUP="dialout"
+# Teensy
+SUBSYSTEM=="tty", ATTRS{idVendor}=="16c0", ATTRS{idProduct}=="0483", MODE="0666", GROUP="dialout"
+
+# =============================================================================
+# Generic fallback for ACM devices (CDC-ACM class)
+# This catches most USB serial devices that appear as /dev/ttyACM*
+# =============================================================================
+KERNEL=="ttyACM[0-9]*", MODE="0666", GROUP="dialout"
+
+# =============================================================================
+# Generic fallback for USB serial devices
+# This catches most USB serial devices that appear as /dev/ttyUSB*
+# =============================================================================
+KERNEL=="ttyUSB[0-9]*", MODE="0666", GROUP="dialout"

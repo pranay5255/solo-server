@@ -16,19 +16,19 @@ def handle_lerobot(config: dict, calibrate: str, motors: str, teleop: bool, reco
     
     if train:
         # Training mode - train a policy on recorded data
-        from solo.commands.robots.lerobot.recording import training_mode
+        from solo.commands.robots.lerobot.modes import training_mode
         training_mode(config, auto_use)
     elif record:
         # Recording mode - check for existing calibration and setup recording
-        from solo.commands.robots.lerobot.recording import recording_mode
+        from solo.commands.robots.lerobot.modes import recording_mode
         recording_mode(config, auto_use)
     elif inference:
         # Inference mode - run pretrained policy on robot
-        from solo.commands.robots.lerobot.recording import inference_mode
+        from solo.commands.robots.lerobot.modes import inference_mode
         inference_mode(config, auto_use)
     elif replay:
         # Replay mode - replay actions from a recorded dataset episode
-        from solo.commands.robots.lerobot.recording import replay_mode
+        from solo.commands.robots.lerobot.modes import replay_mode
         replay_mode(config, auto_use, replay_options)
     elif teleop:
         # Teleoperation mode - check for existing calibration
@@ -126,14 +126,16 @@ def motor_setup_mode(config: dict, arm_type: str = None):
         typer.echo("\n🤖 Select your robot type:")
         typer.echo("1. SO100 (single arm)")
         typer.echo("2. SO101 (single arm)")
-        typer.echo("3. Bimanual SO100")
-        typer.echo("4. Bimanual SO101")
+        typer.echo("3. Koch (single arm)")
+        typer.echo("4. Bimanual SO100")
+        typer.echo("5. Bimanual SO101")
         robot_choice = int(Prompt.ask("Enter robot type", default="1"))
         robot_type_map = {
             1: "so100",
             2: "so101",
-            3: "bi_so100",
-            4: "bi_so101"
+            3: "koch",
+            4: "bi_so100",
+            5: "bi_so101"
         }
         robot_type = robot_type_map.get(robot_choice, "so100")
     

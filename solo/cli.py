@@ -22,6 +22,8 @@ def robo(
     train: bool = typer.Option(False, "--train", help="Train a model (requires recorded data)"),
     inference: bool = typer.Option(False, "--inference", help="Run inference on a pre-trained model"),
     replay: bool = typer.Option(False, "--replay", help="Replay actions from a recorded dataset episode"),
+    scan: bool = typer.Option(False, "--scan", help="Scan for connected motors on all serial ports"),
+    diagnose: bool = typer.Option(False, "--diagnose", help="Run detailed connection diagnostics on all ports"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Automatically use saved settings if available"),
     # Replay-specific options (non-interactive)
     dataset: Optional[str] = typer.Option(None, "--dataset", help="Dataset repository ID for replay (e.g., 'organize_fennel_seed')"),
@@ -32,6 +34,14 @@ def robo(
     """
     Robotics operations: motor setup, calibration, teleoperation, data recording, training, replay, and inference
     """
+    if scan:
+        from solo.commands.robots.lerobot.scan import scan_motors
+        scan_motors()
+        return
+    if diagnose:
+        from solo.commands.robots.lerobot.scan import diagnose_all_ports
+        diagnose_all_ports()
+        return
     from solo.commands.robo import robo as _robo
     _robo(motors, calibrate, teleop, record, train, inference, replay, yes, dataset, episode, follower_id, fps)
 
@@ -110,6 +120,23 @@ def download(model: str):
     """
     from solo.commands.download_hf import download as _download
     _download(model)
+
+
+@app.command(name="setup-usb")
+def setup_usb_cmd(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt (Linux only)")
+):
+    """
+    Set up USB permissions for LeRobot-compatible robot arms.
+    
+    On Linux: Installs udev rules and adds user to dialout group.
+    On macOS: Checks for connected devices and provides driver info.
+    
+    Supports Koch (Dynamixel), SO100/SO101 (Feetech/Waveshare) arms.
+    Run once after installing solo-cli.
+    """
+    from solo.commands.setup_usb import setup_usb
+    setup_usb(auto_confirm=yes)
 
 
 if __name__ == "__main__":

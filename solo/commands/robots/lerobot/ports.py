@@ -39,11 +39,29 @@ def find_available_ports() -> List[str]:
             return []
 
 
-def detect_arm_port(arm_type: str) -> Optional[str]:
+def detect_arm_port(arm_type: str, robot_type: str = None, use_auto_detect: bool = True) -> Optional[str]:
     """
     Detect the port for a specific arm (leader or follower)
+    
+    First tries auto-detection based on motor types (for Koch arms).
+    Falls back to manual plug/unplug detection if auto-detection fails.
+    
     Returns the detected port or None if detection failed
     """
+    # Try auto-detection first (for Koch/Dynamixel arms)
+    if use_auto_detect and robot_type in ("koch", None):
+        typer.echo(f"\n🔍 Auto-detecting {arm_type} arm port...")
+        try:
+            from solo.commands.robots.lerobot.scan import auto_detect_single_port
+            port = auto_detect_single_port(arm_type, robot_type or "koch", verbose=True)
+            if port:
+                return port
+            typer.echo("   Falling back to manual detection...")
+        except Exception as e:
+            typer.echo(f"   Auto-detection failed: {e}")
+            typer.echo("   Falling back to manual detection...")
+    
+    # Manual detection via plug/unplug
     typer.echo(f"\n🔍 Detecting port for {arm_type} arm...")
     
     # Get initial ports
@@ -125,6 +143,20 @@ def detect_arm_port(arm_type: str) -> Optional[str]:
             return new_ports[choice - 1]
         else:
             return new_ports[0]
+
+
+def auto_detect_both_ports(robot_type: str = "koch") -> tuple[Optional[str], Optional[str]]:
+    """
+    Auto-detect both leader and follower ports based on motor types.
+    
+    Returns (leader_port, follower_port).
+    """
+    try:
+        from solo.commands.robots.lerobot.scan import auto_detect_ports
+        return auto_detect_ports(robot_type, verbose=True)
+    except Exception as e:
+        typer.echo(f"⚠️  Auto-detection failed: {e}")
+        return None, None
 
 
 def detect_bimanual_arm_ports(arm_type: str) -> tuple[Optional[str], Optional[str]]:

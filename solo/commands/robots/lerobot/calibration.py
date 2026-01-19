@@ -257,14 +257,16 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
         typer.echo("\n🤖 Select your robot type:")
         typer.echo("1. SO100 (single arm)")
         typer.echo("2. SO101 (single arm)")
-        typer.echo("3. Bimanual SO100")
-        typer.echo("4. Bimanual SO101")
+        typer.echo("3. Koch (single arm)")
+        typer.echo("4. Bimanual SO100")
+        typer.echo("5. Bimanual SO101")
         robot_choice = int(Prompt.ask("Enter robot type", default="1"))
         robot_type_map = {
             1: "so100",
             2: "so101",
-            3: "bi_so100",
-            4: "bi_so101"
+            3: "koch",
+            4: "bi_so100",
+            5: "bi_so101"
         }
         robot_type = robot_type_map.get(robot_choice, "so100")
     
@@ -355,7 +357,7 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
             # Use consolidated decision for leader port
             leader_port = existing_leader_port if reuse_all and existing_leader_port else None
             if not leader_port:
-                leader_port = detect_arm_port("leader")
+                leader_port = detect_arm_port("leader", robot_type=robot_type)
             
             if not leader_port:
                 typer.echo("❌ Failed to detect leader arm. Skipping leader calibration.")
@@ -383,7 +385,7 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
             # Use consolidated decision for follower port
             follower_port = existing_follower_port if reuse_all and existing_follower_port else None
             if not follower_port:
-                follower_port = detect_arm_port("follower")
+                follower_port = detect_arm_port("follower", robot_type=robot_type)
             
             if not follower_port:
                 typer.echo("❌ Failed to detect follower arm. Skipping follower calibration.")
