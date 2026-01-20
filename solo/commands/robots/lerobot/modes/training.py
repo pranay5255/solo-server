@@ -10,7 +10,7 @@ from rich.prompt import Prompt, Confirm
 
 from solo.commands.robots.lerobot.auth import authenticate_huggingface
 from solo.commands.robots.lerobot.dataset import check_dataset_exists
-from solo.commands.robots.lerobot.mode_config import use_preconfigured_args
+from solo.commands.robots.lerobot.mode_config import use_preconfigured_args, load_mode_config
 from solo.commands.robots.lerobot.utils.text_cleaning import clean_ansi_codes, clean_repo_id
 
 
@@ -74,8 +74,12 @@ def training_mode(config: dict, auto_use: bool = False):
         if use_wandb:
             typer.echo(f"   • WandB project: {wandb_project}")
     else:
+        # Get default dataset from recording config if available
+        recording_config = load_mode_config(config, 'recording')
+        default_dataset = recording_config.get('dataset_repo_id') if recording_config else "local/lerobot-dataset"
+        
         # Get configuration from user input
-        dataset_repo_id = Prompt.ask("Enter dataset repository ID", default="lerobot/svla_so101_pickplace")
+        dataset_repo_id = Prompt.ask("Enter dataset repository ID", default=default_dataset)
         
         # Clean ANSI escape codes to prevent file system errors
         dataset_repo_id = clean_ansi_codes(dataset_repo_id)
@@ -375,6 +379,39 @@ def training_mode(config: dict, auto_use: bool = False):
             project=wandb_project if use_wandb else None
         )
         
+        # Check for camera name mismatches and create rename_map if needed
+        rename_map = {}
+        try:
+            from lerobot.datasets.lerobot_dataset import LeRobotDataset
+            typer.echo("🔍 Checking dataset camera names...")
+            temp_dataset = LeRobotDataset(dataset_repo_id)
+            dataset_image_keys = [k for k in temp_dataset.features.keys() if k.startswith("observation.images.")]
+            
+            if dataset_image_keys:
+                typer.echo(f"   Found cameras in dataset: {dataset_image_keys}")
+                
+                # Default policy cameras (ACT/Diffusion typically expect camera1, camera2, camera3)
+                default_policy_cameras = ["observation.images.camera1", "observation.images.camera2", "observation.images.camera3"]
+                
+                # If dataset has different camera names, ask user to map them
+                if len(dataset_image_keys) == 1 and dataset_image_keys[0] != "observation.images.camera1":
+                    # Single camera case - auto-map to camera1
+                    rename_map[dataset_image_keys[0]] = "observation.images.camera1"
+                    typer.echo(f"   📷 Auto-mapping: {dataset_image_keys[0]} → observation.images.camera1")
+                elif set(dataset_image_keys) != set(default_policy_cameras[:len(dataset_image_keys)]):
+                    typer.echo(f"   ⚠️  Camera names don't match policy defaults.")
+                    use_rename = Confirm.ask("   Would you like to auto-map cameras?", default=True)
+                    if use_rename:
+                        for i, cam in enumerate(dataset_image_keys):
+                            if i < 3:  # Map up to 3 cameras
+                                rename_map[cam] = f"observation.images.camera{i+1}"
+                                typer.echo(f"   📷 Mapping: {cam} → observation.images.camera{i+1}")
+        except Exception as e:
+            typer.echo(f"   ⚠️  Could not check camera names: {e}")
+        
+        if rename_map:
+            typer.echo(f"   ✅ Using rename_map: {rename_map}")
+        
         # Create training config with progress tracking
         train_config = TrainPipelineConfig(
             dataset=dataset_config,
@@ -387,6 +424,7 @@ def training_mode(config: dict, auto_use: bool = False):
             wandb=wandb_config,
             seed=1000,
             resume=resume_training,  # Use the resume flag we determined above
+            rename_map=rename_map,
         )
         
         typer.echo("🎓 Starting training... This may take a while.")

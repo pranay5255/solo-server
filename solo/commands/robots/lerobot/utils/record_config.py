@@ -122,7 +122,7 @@ def unified_record_config(
             repo_id=repo_id,
             single_task=mode_specific_kwargs.get('task_description', ''),
             episode_time_s=mode_specific_kwargs.get('episode_time', 60),
-            num_episodes=mode_specific_kwargs.get('num_episodes', 50),
+            num_episodes=mode_specific_kwargs.get('num_episodes', 10),
             push_to_hub=push_to_hub,
             fps=mode_specific_kwargs.get('fps', 30),
             video=True,

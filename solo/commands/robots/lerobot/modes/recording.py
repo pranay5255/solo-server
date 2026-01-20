@@ -189,7 +189,7 @@ def recording_mode(config: dict, auto_use: bool = False):
         episode_time = float(Prompt.ask("Duration of each recording episode in seconds", default="60"))
         
         # Get number of episodes
-        num_episodes = int(Prompt.ask("Total number of episodes to record", default="50"))
+        num_episodes = int(Prompt.ask("Total number of episodes to record", default="10"))
 
         # Setup cameras
         camera_config = setup_cameras()

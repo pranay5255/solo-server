@@ -120,7 +120,7 @@ def replay_mode(config: dict, auto_use: bool = False, replay_options: dict = Non
     from lerobot.processor import make_default_robot_action_processor
     from lerobot.robots import make_robot_from_config
     from lerobot.utils.constants import ACTION
-    from lerobot.utils.robot_utils import busy_wait
+    from lerobot.utils.robot_utils import precise_sleep
     from lerobot.utils.utils import log_say
     
     robot = None
@@ -176,7 +176,7 @@ def replay_mode(config: dict, auto_use: bool = False, replay_options: dict = Non
                     processed_action = robot_action_processor((action, robot.get_observation()))
                     robot.send_action(processed_action)
                     
-                    busy_wait(1 / fps - (time.perf_counter() - start_t))
+                    precise_sleep(1 / fps - (time.perf_counter() - start_t))
                 
                 robot.disconnect()
                 typer.echo(f"✅ Replay completed! ({len(episode_frames)} frames)")
