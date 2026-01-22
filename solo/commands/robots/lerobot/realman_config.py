@@ -49,7 +49,7 @@ def get_realman_config_path() -> Path:
         Path.cwd() / "robot_config.yaml",
         Path.cwd() / "config" / "robot_config.yaml",
         Path.home() / ".solo" / "realman_config.yaml",
-        Path(__file__).parent.parent.parent.parent.parent / "config" / "robot_config.yaml",
+        Path(__file__).parent.parent.parent.parent / "config" / "realman_config.yaml",  # solo/config/
     ]
     
     for loc in locations:
