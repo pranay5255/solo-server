@@ -72,6 +72,8 @@ def get_robot_config_classes(robot_type: str) -> Tuple[Optional[type], Optional[
     Returns (leader_config_class, follower_config_class)
     
     Uses lazy loading to only import config classes when actually needed.
+    
+    For RealMan robots, the leader is always SO101 (USB) and follower is RealMan (network).
     """
     if robot_type == "so100":
         from lerobot.teleoperators.so100_leader import SO100LeaderConfig
@@ -94,6 +96,12 @@ def get_robot_config_classes(robot_type: str) -> Tuple[Optional[type], Optional[
         # For now, return None to indicate unsupported
         typer.echo("⚠️  bi_so101 support coming soon!")
         return None, None
+    elif robot_type in ["realman_r1d2", "realman_rm65", "realman_rm75"]:
+        # RealMan robots use SO101 as leader arm (USB serial)
+        # and RealMan arm as follower (network connection)
+        from lerobot.teleoperators.so101_leader import SO101LeaderConfig
+        from lerobot.robots.realman_follower import RealManFollowerConfig
+        return SO101LeaderConfig, RealManFollowerConfig
     else:
         return None, None
 
@@ -101,6 +109,34 @@ def get_robot_config_classes(robot_type: str) -> Tuple[Optional[type], Optional[
 def is_bimanual_robot(robot_type: str) -> bool:
     """Check if robot type is bimanual"""
     return robot_type in ["bi_so100", "bi_so101"]
+
+
+def is_realman_robot(robot_type: str) -> bool:
+    """
+    Check if robot type is a RealMan robot (network-connected follower).
+    
+    RealMan robots connect via IP/port instead of USB serial.
+    They use SO101 as the leader arm for teleoperation.
+    """
+    return robot_type in ["realman_r1d2", "realman_rm65", "realman_rm75"]
+
+
+def get_realman_model_from_type(robot_type: str) -> str:
+    """
+    Get the RealMan model name from robot type.
+    
+    Args:
+        robot_type: Robot type string (e.g., "realman_r1d2")
+        
+    Returns:
+        Model name (e.g., "R1D2")
+    """
+    model_map = {
+        "realman_r1d2": "R1D2",
+        "realman_rm65": "RM65",
+        "realman_rm75": "RM75",
+    }
+    return model_map.get(robot_type, "R1D2")
 
 
 def normalize_fps(requested_fps: float) -> int:

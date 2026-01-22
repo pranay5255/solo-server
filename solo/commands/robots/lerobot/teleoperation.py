@@ -12,6 +12,7 @@ from solo.commands.robots.lerobot.config import (
     get_known_ids,
     save_lerobot_config,
     is_bimanual_robot,
+    is_realman_robot,
     create_bimanual_leader_config,
     create_bimanual_follower_config,
 )
@@ -45,21 +46,40 @@ def teleoperation(config: dict = None, auto_use: bool = False) -> bool:
             typer.echo("1. SO100 (single arm)")
             typer.echo("2. SO101 (single arm)")
             typer.echo("3. Koch (single arm)")
-            typer.echo("4. Bimanual SO100")
-            typer.echo("5. Bimanual SO101")
+            typer.echo("4. RealMan R1D2 (follower with SO101 leader)")
+            typer.echo("5. Bimanual SO100")
+            typer.echo("6. Bimanual SO101")
             robot_choice = int(Prompt.ask("Enter robot type", default="1"))
             robot_type_map = {
                 1: "so100",
                 2: "so101",
                 3: "koch",
-                4: "bi_so100",
-                5: "bi_so101"
+                4: "realman_r1d2",
+                5: "bi_so100",
+                6: "bi_so101"
             }
             robot_type = robot_type_map.get(robot_choice, "so100")
             config['robot_type'] = robot_type
         
+        # Check if RealMan and handle network-based follower
+        if is_realman_robot(robot_type):
+            lerobot_config = config.get('lerobot', {})
+            
+            # Leader is SO101 (USB)
+            if not leader_port:
+                leader_port = detect_arm_port("leader", robot_type="so101")
+                config['leader_port'] = leader_port
+            
+            # Follower is RealMan (network) - load config
+            from solo.commands.robots.lerobot.realman_config import load_realman_config
+            realman_config = lerobot_config.get('realman_config') or load_realman_config()
+            config['realman_config'] = realman_config
+            
+            # For RealMan, follower_port is not used (network-based)
+            follower_port = None
+        
         # Check if bimanual and handle port detection accordingly
-        if is_bimanual_robot(robot_type):
+        elif is_bimanual_robot(robot_type):
             lerobot_config = config.get('lerobot', {})
             left_leader_port = lerobot_config.get('left_leader_port')
             right_leader_port = lerobot_config.get('right_leader_port')
@@ -124,13 +144,32 @@ def teleoperation(config: dict = None, auto_use: bool = False) -> bool:
             typer.echo(f"❌ Unsupported robot type for teleoperation: {robot_type}")
             return False
         
-        # Debug: Show port assignments
-        typer.echo(f"\n🔌 Port Configuration:")
+        # Debug: Show port/connection assignments
+        typer.echo(f"\n🔌 Connection Configuration:")
         typer.echo(f"   • Leader port:   {leader_port}")
-        typer.echo(f"   • Follower port: {follower_port}")
+        if is_realman_robot(robot_type):
+            realman_config = config.get('realman_config', {})
+            typer.echo(f"   • Follower:      RealMan @ {realman_config.get('ip', 'N/A')}:{realman_config.get('port', 'N/A')}")
+        else:
+            typer.echo(f"   • Follower port: {follower_port}")
         
-        # Create configurations based on whether bimanual or not
-        if is_bimanual_robot(robot_type):
+        # Create configurations based on robot type
+        if is_realman_robot(robot_type):
+            # RealMan: SO101 leader (USB) + RealMan follower (network)
+            from solo.commands.robots.lerobot.realman_config import create_realman_follower_config
+            
+            # Create SO101 leader config
+            leader_config = leader_config_class(port=leader_port, id=leader_id or "so101_leader")
+            
+            # Create RealMan follower config
+            realman_config = config.get('realman_config', {})
+            follower_config = create_realman_follower_config(
+                realman_config,
+                camera_config,
+                follower_id=follower_id or "realman_r1d2_follower"
+            )
+        
+        elif is_bimanual_robot(robot_type):
             # Create bimanual configurations
             lerobot_config = config.get('lerobot', {})
             left_leader_port = lerobot_config.get('left_leader_port')
@@ -193,7 +232,11 @@ def teleoperation(config: dict = None, auto_use: bool = False) -> bool:
                     follower_id,
                 )
         
-        if is_bimanual_robot(robot_type):
+        if is_realman_robot(robot_type):
+            typer.echo("🎮 Starting RealMan teleoperation... Press Ctrl+C to stop.")
+            typer.echo("📋 Move the SO101 leader arm to control the RealMan follower arm.")
+            typer.echo("⚠️  Note: RealMan uses network connection - ensure robot is powered and connected.")
+        elif is_bimanual_robot(robot_type):
             typer.echo("🎮 Starting bimanual teleoperation... Press Ctrl+C to stop.")
             typer.echo("📋 Move BOTH leader arms to control BOTH follower arms.")
         else:

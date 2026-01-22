@@ -10,6 +10,7 @@ from solo.commands.robots.lerobot.config import (
     validate_lerobot_config,
     get_known_ids,
     is_bimanual_robot,
+    is_realman_robot,
 )
 from solo.commands.robots.lerobot.auth import authenticate_huggingface
 from solo.commands.robots.lerobot.dataset import handle_existing_dataset, normalize_repo_id
@@ -62,7 +63,14 @@ def recording_mode(config: dict, auto_use: bool = False):
         should_resume = True
         
         # Validate that we have the required settings
-        if not (leader_port and follower_port and robot_type):
+        # RealMan robots don't need follower_port (use network instead)
+        if is_realman_robot(robot_type):
+            realman_config = preconfigured.get('realman_config')
+            if not (leader_port and robot_type and realman_config):
+                typer.echo("❌ Preconfigured settings missing required RealMan configuration")
+                typer.echo("Please run setup first or use new settings")
+                preconfigured = None
+        elif not (leader_port and follower_port and robot_type):
             typer.echo("❌ Preconfigured settings missing required robot configuration")
             typer.echo("Please run calibration first or use new settings")
             preconfigured = None
@@ -77,21 +85,44 @@ def recording_mode(config: dict, auto_use: bool = False):
             typer.echo("1. SO100 (single arm)")
             typer.echo("2. SO101 (single arm)")
             typer.echo("3. Koch (single arm)")
-            typer.echo("4. Bimanual SO100")
-            typer.echo("5. Bimanual SO101")
+            typer.echo("4. RealMan R1D2 (follower with SO101 leader)")
+            typer.echo("5. Bimanual SO100")
+            typer.echo("6. Bimanual SO101")
             robot_choice = int(Prompt.ask("Enter robot type", default="1"))
             robot_type_map = {
                 1: "so100",
                 2: "so101",
                 3: "koch",
-                4: "bi_so100",
-                5: "bi_so101"
+                4: "realman_r1d2",
+                5: "bi_so100",
+                6: "bi_so101"
             }
             robot_type = robot_type_map.get(robot_choice, "so100")
             config['robot_type'] = robot_type
         
-        # Handle port detection based on robot type
-        if is_bimanual_robot(robot_type):
+        # Handle port/connection detection based on robot type
+        if is_realman_robot(robot_type):
+            # RealMan: SO101 leader (USB) + RealMan follower (network)
+            lerobot_config = config.get('lerobot', {})
+            
+            # Detect leader port (SO101 USB)
+            if not leader_port:
+                leader_port = detect_arm_port("leader", robot_type="so101")
+                config['leader_port'] = leader_port
+            
+            # Load RealMan follower config (network)
+            from solo.commands.robots.lerobot.realman_config import load_realman_config
+            realman_config = lerobot_config.get('realman_config') or load_realman_config()
+            config['realman_config'] = realman_config
+            
+            # For RealMan, follower_port is not used
+            follower_port = None
+            
+            typer.echo(f"\n🔌 Connection Configuration:")
+            typer.echo(f"   • Leader (SO101): {leader_port}")
+            typer.echo(f"   • Follower (RealMan): {realman_config.get('ip')}:{realman_config.get('port')}")
+        
+        elif is_bimanual_robot(robot_type):
             # Bimanual port detection
             lerobot_config = config.get('lerobot', {})
             left_leader_port = lerobot_config.get('left_leader_port')
@@ -252,8 +283,15 @@ def recording_mode(config: dict, auto_use: bool = False):
             'should_resume': should_resume,
         }
         
-        # Add bimanual ports if bimanual robot
-        if is_bimanual_robot(robot_type):
+        # Add robot-type specific configuration
+        if is_realman_robot(robot_type):
+            # Add RealMan network configuration
+            realman_config = config.get('realman_config') or config.get('lerobot', {}).get('realman_config')
+            record_config_kwargs.update({
+                'realman_config': realman_config,
+            })
+        elif is_bimanual_robot(robot_type):
+            # Add bimanual ports
             lerobot_config = config.get('lerobot', {})
             record_config_kwargs.update({
                 'left_leader_port': lerobot_config.get('left_leader_port'),
@@ -328,8 +366,15 @@ def recording_mode(config: dict, auto_use: bool = False):
                                 'should_resume': should_resume,
                             }
                             
-                            # Add bimanual ports if bimanual robot
-                            if is_bimanual_robot(robot_type):
+                            # Add robot-type specific configuration
+                            if is_realman_robot(robot_type):
+                                # Add RealMan network configuration
+                                realman_config = config.get('realman_config') or config.get('lerobot', {}).get('realman_config')
+                                retry_config_kwargs.update({
+                                    'realman_config': realman_config,
+                                })
+                            elif is_bimanual_robot(robot_type):
+                                # Add bimanual ports
                                 lerobot_config = config.get('lerobot', {})
                                 retry_config_kwargs.update({
                                     'left_leader_port': lerobot_config.get('left_leader_port'),

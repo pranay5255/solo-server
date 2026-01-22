@@ -10,6 +10,7 @@ from solo.commands.robots.lerobot.config import (
     get_robot_config_classes,
     create_robot_configs,
     is_bimanual_robot,
+    is_realman_robot,
     create_bimanual_leader_config,
     create_bimanual_follower_config,
 )
@@ -27,14 +28,44 @@ def unified_record_config(
     """
     Create a unified record configuration for both inference and recording modes.
     Uses the same underlying lerobot record infrastructure.
-    Supports both single-arm and bimanual robots.
+    Supports single-arm, bimanual, and RealMan robots.
+    
+    For RealMan robots:
+    - leader_port: USB port for SO101 leader arm
+    - follower_port: Not used (RealMan uses network)
+    - realman_config: Network configuration for RealMan (passed in mode_specific_kwargs)
     """
     # Import lerobot components
     from lerobot.scripts.lerobot_record import RecordConfig, DatasetRecordConfig
     from lerobot.configs.policies import PreTrainedConfig
     
+    # Check if RealMan robot (network-based follower)
+    if is_realman_robot(robot_type):
+        # RealMan: SO101 leader (USB) + RealMan follower (network)
+        from lerobot.teleoperators.so101_leader import SO101LeaderConfig
+        from solo.commands.robots.lerobot.realman_config import create_realman_follower_config
+        
+        # Create SO101 leader config
+        leader_config = SO101LeaderConfig(
+            port=leader_port,
+            id=mode_specific_kwargs.get('leader_id', 'so101_leader')
+        )
+        
+        # Create RealMan follower config
+        realman_config = mode_specific_kwargs.get('realman_config', {})
+        if not realman_config:
+            # Try to load from file
+            from solo.commands.robots.lerobot.realman_config import load_realman_config
+            realman_config = load_realman_config()
+        
+        follower_config = create_realman_follower_config(
+            realman_config,
+            camera_config,
+            follower_id=mode_specific_kwargs.get('follower_id', 'realman_r1d2_follower')
+        )
+    
     # Check if bimanual robot
-    if is_bimanual_robot(robot_type):
+    elif is_bimanual_robot(robot_type):
         # Bimanual configuration
         leader_config_class, follower_config_class = get_robot_config_classes(robot_type)
         

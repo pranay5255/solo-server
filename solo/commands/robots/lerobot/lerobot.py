@@ -127,20 +127,26 @@ def motor_setup_mode(config: dict, arm_type: str = None):
         typer.echo("1. SO100 (single arm)")
         typer.echo("2. SO101 (single arm)")
         typer.echo("3. Koch (single arm)")
-        typer.echo("4. Bimanual SO100")
-        typer.echo("5. Bimanual SO101")
+        typer.echo("4. RealMan R1D2 (follower with SO101 leader)")
+        typer.echo("5. Bimanual SO100")
+        typer.echo("6. Bimanual SO101")
         robot_choice = int(Prompt.ask("Enter robot type", default="1"))
         robot_type_map = {
             1: "so100",
             2: "so101",
             3: "koch",
-            4: "bi_so100",
-            5: "bi_so101"
+            4: "realman_r1d2",
+            5: "bi_so100",
+            6: "bi_so101"
         }
         robot_type = robot_type_map.get(robot_choice, "so100")
     
     motor_config = {'robot_type': robot_type}
     is_bimanual = is_bimanual_robot(robot_type)
+    
+    # Check if RealMan robot (uses network connection for follower)
+    from solo.commands.robots.lerobot.config import is_realman_robot
+    is_realman = is_realman_robot(robot_type)
     
     # Determine which arms to setup based on arm_type parameter
     if arm_type == "leader":
@@ -154,7 +160,70 @@ def motor_setup_mode(config: dict, arm_type: str = None):
         setup_leader = True
         setup_follower = True
     
-    if is_bimanual:
+    if is_realman:
+        # RealMan robot setup workflow
+        # Leader is SO101 (USB), Follower is RealMan (network)
+        from solo.commands.robots.lerobot.realman_config import (
+            load_realman_config,
+            prompt_realman_config,
+            save_realman_config,
+            test_realman_connection,
+        )
+        
+        if setup_leader:
+            # Setup SO101 leader arm (USB)
+            leader_port = existing_leader_port if reuse_all and existing_leader_port else None
+            if not leader_port:
+                typer.echo("\n📟 Setting up SO101 Leader Arm (USB)")
+                leader_port = detect_arm_port("leader")
+            
+            if not leader_port:
+                typer.echo("❌ Failed to detect SO101 leader arm. Skipping leader setup.")
+            else:
+                motor_config['leader_port'] = leader_port
+                save_lerobot_config(config, {'leader_port': leader_port})
+                
+                # Setup motor IDs for SO101 leader
+                leader_motors_setup = setup_motors_for_arm("leader", leader_port, "so101")
+                motor_config['leader_motors_setup'] = leader_motors_setup
+                
+                if leader_motors_setup:
+                    typer.echo("✅ SO101 leader arm motor setup completed!")
+                else:
+                    typer.echo("❌ SO101 leader arm motor setup failed.")
+        
+        if setup_follower:
+            # Setup RealMan follower arm (network)
+            typer.echo("\n🤖 Setting up RealMan Follower Arm (Network)")
+            typer.echo("   RealMan robots connect via IP address, not USB.")
+            
+            # Load existing config or prompt for new one
+            lerobot_config = config.get('lerobot', {})
+            existing_realman_config = lerobot_config.get('realman_config')
+            
+            if existing_realman_config and reuse_all:
+                realman_config = existing_realman_config
+                typer.echo(f"   Using existing config: {realman_config['ip']}:{realman_config['port']}")
+            else:
+                # Try to load from file first
+                realman_config = load_realman_config()
+                
+                # Ask if user wants to modify
+                if Confirm.ask("Would you like to modify RealMan settings?", default=False):
+                    realman_config = prompt_realman_config(realman_config)
+                    save_realman_config(realman_config)
+            
+            # Test connection
+            if test_realman_connection(realman_config):
+                motor_config['realman_config'] = realman_config
+                motor_config['follower_motors_setup'] = True
+                save_lerobot_config(config, {'realman_config': realman_config})
+                typer.echo("✅ RealMan follower arm setup completed!")
+            else:
+                motor_config['follower_motors_setup'] = False
+                typer.echo("❌ RealMan follower arm setup failed - check network connection.")
+    
+    elif is_bimanual:
         # Bimanual motor setup workflow
         if setup_leader:
             left_leader_port = existing_left_leader_port if reuse_all and existing_left_leader_port else None
