@@ -70,9 +70,15 @@ def teleoperation(config: dict = None, auto_use: bool = False) -> bool:
                 leader_port = detect_arm_port("leader", robot_type="so101")
                 config['leader_port'] = leader_port
             
-            # Follower is RealMan (network) - load config
+            # Follower is RealMan (network) - always load fresh config from YAML
+            # to pick up any configuration changes (like invert_joints)
             from solo.commands.robots.lerobot.realman_config import load_realman_config
-            realman_config = lerobot_config.get('realman_config') or load_realman_config()
+            realman_config = load_realman_config()
+            # Merge with any saved network settings (ip/port) if they exist
+            saved_realman = lerobot_config.get('realman_config', {})
+            if saved_realman:
+                realman_config['ip'] = saved_realman.get('ip', realman_config['ip'])
+                realman_config['port'] = saved_realman.get('port', realman_config['port'])
             config['realman_config'] = realman_config
             
             # For RealMan, follower_port is not used (network-based)

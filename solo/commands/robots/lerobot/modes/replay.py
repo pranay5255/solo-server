@@ -13,6 +13,7 @@ from solo.commands.robots.lerobot.config import (
     get_known_ids,
     save_lerobot_config,
     is_bimanual_robot,
+    is_realman_robot,
     create_follower_config,
     create_bimanual_follower_config,
 )
@@ -57,20 +58,37 @@ def replay_mode(config: dict, auto_use: bool = False, replay_options: dict = Non
             typer.echo("1. SO100 (single arm)")
             typer.echo("2. SO101 (single arm)")
             typer.echo("3. Koch (single arm)")
-            typer.echo("4. Bimanual SO100")
-            typer.echo("5. Bimanual SO101")
+            typer.echo("4. RealMan R1D2 (follower with SO101 leader)")
+            typer.echo("5. Bimanual SO100")
+            typer.echo("6. Bimanual SO101")
             robot_choice = int(Prompt.ask("Enter robot type", default="1"))
             robot_type_map = {
                 1: "so100",
                 2: "so101",
                 3: "koch",
-                4: "bi_so100",
-                5: "bi_so101"
+                4: "realman_r1d2",
+                5: "bi_so100",
+                6: "bi_so101"
             }
             robot_type = robot_type_map.get(robot_choice, "so100")
         
         # Handle port detection based on robot type
-        if is_bimanual_robot(robot_type):
+        if is_realman_robot(robot_type):
+            # RealMan: Load network config, no USB port needed
+            from solo.commands.robots.lerobot.realman_config import load_realman_config
+            lerobot_config = config.get('lerobot', {})
+            # Always load fresh config from YAML to pick up changes (like invert_joints)
+            realman_config = load_realman_config()
+            # Merge with any saved network settings (ip/port) if they exist
+            saved_realman = lerobot_config.get('realman_config', {})
+            if saved_realman:
+                realman_config['ip'] = saved_realman.get('ip', realman_config['ip'])
+                realman_config['port'] = saved_realman.get('port', realman_config['port'])
+            config['realman_config'] = realman_config
+            follower_port = None  # Network-based, no USB port
+            typer.echo(f"\n🔌 RealMan follower: {realman_config.get('ip')}:{realman_config.get('port')}")
+        
+        elif is_bimanual_robot(robot_type):
             # Bimanual port detection
             lerobot_config = config.get('lerobot', {})
             left_follower_port = lerobot_config.get('left_follower_port')
@@ -131,7 +149,17 @@ def replay_mode(config: dict, auto_use: bool = False, replay_options: dict = Non
             raise ValueError(f"Unsupported robot type: {robot_type}")
         
         # Create follower config based on robot type
-        if is_bimanual_robot(robot_type):
+        if is_realman_robot(robot_type):
+            # RealMan: Create network-based follower config
+            from solo.commands.robots.lerobot.realman_config import create_realman_follower_config
+            realman_cfg = config.get('realman_config')
+            follower_config = create_realman_follower_config(
+                realman_cfg,
+                camera_config=None,
+                follower_id=follower_id
+            )
+        
+        elif is_bimanual_robot(robot_type):
             lerobot_config = config.get('lerobot', {})
             left_follower_port = lerobot_config.get('left_follower_port')
             right_follower_port = lerobot_config.get('right_follower_port')

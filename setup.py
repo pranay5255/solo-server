@@ -26,7 +26,7 @@ setup(
         "rich",
         "huggingface_hub",
         "pydantic",
-        "lerobot[feetech,dynamixel]>=0.4.0,<0.5.0",
+        # "lerobot[feetech,dynamixel,realman]>=0.4.0,<0.5.0",  # Install lerobot separately from local source
         "transformers",
         "accelerate",
         "num2words"

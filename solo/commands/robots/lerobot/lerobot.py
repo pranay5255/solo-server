@@ -58,12 +58,11 @@ def calibration_mode(config: dict, arm_type: str = None):
     """Handle LeRobot calibration mode"""
     # Lazy import - only load when calibration is actually used
     from solo.commands.robots.lerobot.calibration import calibration, check_calibration_success
-    from solo.commands.robots.lerobot.config import save_lerobot_config
     
     typer.echo("🔧 Starting LeRobot calibration mode...")
     
+    # calibration() saves config internally, no need to save again
     arm_config = calibration(config, arm_type)
-    save_lerobot_config(config, arm_config)
     
     # Check calibration success using utility function
     check_calibration_success(arm_config, False)  # Motors already set up

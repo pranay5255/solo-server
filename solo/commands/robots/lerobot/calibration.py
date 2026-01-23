@@ -16,9 +16,12 @@ from solo.commands.robots.lerobot.config import (
     get_known_ids,
     add_known_id,
     is_bimanual_robot,
+    is_realman_robot,
     create_bimanual_leader_config,
     create_bimanual_follower_config,
 )
+from solo.commands.robots.lerobot.realman_config import load_realman_config, prompt_realman_config, test_realman_connection
+from lerobot.robots.realman_follower import RealManFollowerConfig
 
 def calibrate_arm(arm_type: str, port: str, robot_type: str = "so100", arm_id: Optional[str] = None) -> bool:
     """
@@ -51,6 +54,52 @@ def calibrate_arm(arm_type: str, port: str, robot_type: str = "so100", arm_id: O
         
     except Exception as e:
         typer.echo(f"❌ Calibration failed for {arm_type} arm: {e}")
+        return False
+
+
+def calibrate_realman_follower(realman_cfg: Dict, follower_id: str) -> bool:
+    """
+    Calibrate RealMan follower arm by recording joint ranges and center position.
+    
+    Args:
+        realman_cfg: Dictionary containing RealMan configuration (ip, port, etc.)
+        follower_id: ID to assign to this follower arm
+    
+    Returns:
+        True if calibration succeeded, False otherwise
+    """
+    try:
+        # Create RealManFollowerConfig
+        follower_config = RealManFollowerConfig(
+            ip=realman_cfg['ip'],
+            port=realman_cfg['port'],
+            model=realman_cfg['model'],
+            velocity=realman_cfg.get('velocity', 100),
+            id=follower_id
+        )
+        
+        # Create robot from config
+        robot = make_robot_from_config(follower_config)
+        
+        # Connect to robot (calibrate=False to avoid double calibration)
+        typer.echo("\n🌐 Connecting to RealMan follower...")
+        robot.connect(calibrate=False)
+        
+        # Run calibration (records joint ranges and center position)
+        typer.echo("📏 Starting joint range calibration...")
+        typer.echo("⚠️  You will be prompted to move each joint to its min and max positions.\n")
+        robot.calibrate()
+        
+        # Disconnect
+        robot.disconnect()
+        
+        typer.echo(f"\n✅ RealMan follower calibrated successfully!")
+        return True
+    
+    except Exception as e:
+        typer.echo(f"❌ RealMan follower calibration failed: {str(e)}")
+        import traceback
+        typer.echo(traceback.format_exc())
         return False
 
 
@@ -260,18 +309,21 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
         typer.echo("3. Koch (single arm)")
         typer.echo("4. Bimanual SO100")
         typer.echo("5. Bimanual SO101")
+        typer.echo("6. RealMan R1D2 (follower with SO101 leader)")
         robot_choice = int(Prompt.ask("Enter robot type", default="1"))
         robot_type_map = {
             1: "so100",
             2: "so101",
             3: "koch",
             4: "bi_so100",
-            5: "bi_so101"
+            5: "bi_so101",
+            6: "realman_r1d2"
         }
         robot_type = robot_type_map.get(robot_choice, "so100")
     
     config['robot_type'] = robot_type
     is_bimanual = is_bimanual_robot(robot_type)
+    is_realman = is_realman_robot(robot_type)
     
     # Determine which arms to calibrate based on arm_type parameter
     if arm_type == "leader":
@@ -284,6 +336,100 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
         # setup both arms
         setup_leader = True
         setup_follower = True
+    
+    # Handle RealMan robots (SO101 leader + RealMan follower via network)
+    if is_realman:
+        from solo.commands.robots.lerobot.realman_config import (
+            load_realman_config,
+            prompt_realman_config,
+            test_realman_connection,
+        )
+        
+        typer.echo("\n🤖 RealMan R1D2 Setup")
+        typer.echo("   Leader: SO101 (USB) - will be calibrated")
+        typer.echo("   Follower: RealMan (network) - no calibration needed")
+        
+        # Setup SO101 leader arm (USB) - needs calibration
+        if setup_leader:
+            leader_port = existing_leader_port if reuse_all and existing_leader_port else None
+            if not leader_port:
+                typer.echo("\n🔍 Detecting SO101 leader arm...")
+                leader_port = detect_arm_port("leader", robot_type="so101")
+            
+            if not leader_port:
+                typer.echo("❌ Failed to detect SO101 leader arm. Skipping leader calibration.")
+            else:
+                config['leader_port'] = leader_port
+                known_leader_ids, _ = get_known_ids(main_config or {})
+                default_leader_id = (main_config or {}).get('lerobot', {}).get('leader_id') or "so101_leader"
+                if known_leader_ids:
+                    typer.echo("📇 Known leader ids:")
+                    for i, kid in enumerate(known_leader_ids, 1):
+                        typer.echo(f"   {i}. {kid}")
+                leader_id = Prompt.ask("Enter leader id", default=default_leader_id)
+                
+                # Calibrate SO101 leader
+                if calibrate_arm("leader", leader_port, "so101", leader_id):
+                    config['leader_calibrated'] = True
+                    config['leader_id'] = leader_id
+                    # Add known ID - ensure we have proper main_config
+                    target_config = main_config if main_config is not None else {}
+                    add_known_id(target_config, 'leader', leader_id)
+                    if main_config is None:
+                        main_config = target_config
+                else:
+                    typer.echo("❌ Leader arm calibration failed.")
+                    config['leader_calibrated'] = False
+        
+        # Setup RealMan follower (network) - needs calibration for joint mapping
+        if setup_follower:
+            typer.echo("\n🌐 Configuring RealMan follower (network connection)...")
+            
+            # Load or prompt for RealMan config
+            realman_cfg = load_realman_config()
+            if not realman_cfg or not Confirm.ask(f"Use RealMan at {realman_cfg['ip']}:{realman_cfg['port']}?", default=True):
+                realman_cfg = prompt_realman_config(realman_cfg)
+            
+            # Test connection
+            if test_realman_connection(realman_cfg):
+                # Store RealMan config in main config
+                if not config.get('lerobot'):
+                    config['lerobot'] = {}
+                config['lerobot']['realman_config'] = realman_cfg
+                config['realman_config'] = realman_cfg  # Also store at top level for easy access
+                
+                # Set follower ID
+                _, known_follower_ids = get_known_ids(main_config or {})
+                default_follower_id = (main_config or {}).get('lerobot', {}).get('follower_id') or "realman_r1d2_follower"
+                if known_follower_ids:
+                    typer.echo("📇 Known follower ids:")
+                    for i, kid in enumerate(known_follower_ids, 1):
+                        typer.echo(f"   {i}. {kid}")
+                follower_id = Prompt.ask("Enter follower id", default=default_follower_id)
+                config['follower_id'] = follower_id
+                
+                # Add known ID - ensure we have proper main_config
+                target_config = main_config if main_config is not None else {}
+                add_known_id(target_config, 'follower', follower_id)
+                if main_config is None:
+                    main_config = target_config
+                
+                typer.echo(f"✅ RealMan follower connection test successful: {realman_cfg['model']} at {realman_cfg['ip']}:{realman_cfg['port']}")
+                
+                # Run calibration to record joint ranges
+                if calibrate_realman_follower(realman_cfg, follower_id):
+                    config['follower_calibrated'] = True
+                else:
+                    config['follower_calibrated'] = False
+            else:
+                typer.echo("❌ Failed to connect to RealMan follower. Please check network settings.")
+                config['follower_calibrated'] = False
+        
+        # Save config - ensure main_config exists
+        if main_config is None:
+            main_config = {}
+        save_lerobot_config(main_config, config)
+        return config
     
     if is_bimanual:
         # Bimanual calibration workflow
@@ -447,7 +593,11 @@ def display_arms_status(robot_type: str, leader_port: str, follower_port: str, a
 def check_calibration_success(arm_config: dict, setup_motors: bool = False) -> None:
     """Check and report calibration success status with appropriate messages."""
     leader_configured = arm_config.get('leader_port') and arm_config.get('leader_calibrated')
-    follower_configured = arm_config.get('follower_port') and arm_config.get('follower_calibrated')
+    # For RealMan, follower uses network (realman_config) instead of USB port
+    follower_configured = (
+        (arm_config.get('follower_port') or arm_config.get('realman_config')) 
+        and arm_config.get('follower_calibrated')
+    )
     
     if leader_configured and follower_configured:
         typer.echo("🎉 All arms calibrated successfully!")

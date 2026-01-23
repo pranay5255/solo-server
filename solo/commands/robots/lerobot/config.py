@@ -76,30 +76,29 @@ def get_robot_config_classes(robot_type: str) -> Tuple[Optional[type], Optional[
     For RealMan robots, the leader is always SO101 (USB) and follower is RealMan (network).
     """
     if robot_type == "so100":
-        from lerobot.teleoperators.so100_leader import SO100LeaderConfig
-        from lerobot.robots.so100_follower import SO100FollowerConfig
+        from lerobot.teleoperators.so_leader import SO100LeaderConfig
+        from lerobot.robots.so_follower import SO100FollowerConfig
         return SO100LeaderConfig, SO100FollowerConfig
     elif robot_type == "so101":
-        from lerobot.teleoperators.so101_leader import SO101LeaderConfig
-        from lerobot.robots.so101_follower import SO101FollowerConfig
+        from lerobot.teleoperators.so_leader import SO101LeaderConfig
+        from lerobot.robots.so_follower import SO101FollowerConfig
         return SO101LeaderConfig, SO101FollowerConfig
     elif robot_type == "koch":
         from lerobot.teleoperators.koch_leader import KochLeaderConfig
         from lerobot.robots.koch_follower import KochFollowerConfig
         return KochLeaderConfig, KochFollowerConfig
     elif robot_type == "bi_so100":
-        from lerobot.teleoperators.bi_so100_leader import BiSO100LeaderConfig
-        from lerobot.robots.bi_so100_follower import BiSO100FollowerConfig
+        from lerobot.teleoperators.bi_so_leader import BiSO100LeaderConfig
+        from lerobot.robots.bi_so_follower import BiSO100FollowerConfig
         return BiSO100LeaderConfig, BiSO100FollowerConfig
     elif robot_type == "bi_so101":
-        # Future support - would need BiSO101Leader/Follower classes in lerobot
-        # For now, return None to indicate unsupported
-        typer.echo("⚠️  bi_so101 support coming soon!")
-        return None, None
+        from lerobot.teleoperators.bi_so_leader import BiSO101LeaderConfig
+        from lerobot.robots.bi_so_follower import BiSO101FollowerConfig
+        return BiSO101LeaderConfig, BiSO101FollowerConfig
     elif robot_type in ["realman_r1d2", "realman_rm65", "realman_rm75"]:
         # RealMan robots use SO101 as leader arm (USB serial)
         # and RealMan arm as follower (network connection)
-        from lerobot.teleoperators.so101_leader import SO101LeaderConfig
+        from lerobot.teleoperators.so_leader import SO101LeaderConfig
         from lerobot.robots.realman_follower import RealManFollowerConfig
         return SO101LeaderConfig, RealManFollowerConfig
     else:

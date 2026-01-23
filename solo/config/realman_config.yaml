@@ -9,7 +9,7 @@
 
 robot:
   # Network connection settings
-  ip: "192.168.1.18"    # Robot IP address (check your network settings)
+  ip: "192.168.10.18"    # Robot IP address (check your network settings)
   port: 8080            # Robot port (default: 8080)
   
   # Robot model: R1D2, RM65, RM75, RML63, ECO65, GEN72
@@ -55,6 +55,14 @@ safety:
   enable_velocity_limits: true
   enable_workspace_limits: true
   enforce_joint_limits: true
+  
+  # Minimum Z position for end effector (meters)
+  # Set to prevent the arm from going below a certain height (e.g., table surface)
+  # Example: 0.05 = 5cm above robot base, null = disabled
+  min_z_position: null
+  
+  # Action when Z limit is reached: "clamp" (hold position) or "reject" (block command)
+  z_limit_action: "clamp"
 
 gripper:
   # Gripper settings (if equipped)
@@ -76,4 +84,15 @@ joint_limits:
 # When using SO101 (5-joint) to control R1D2 (6-joint),
 # joint 4 is held at this fixed position
 fixed_joint_4_position: 0.0
+
+# Invert joint mappings
+# Set to true for joints that rotate in the opposite direction from SO101
+# Adjust these based on your calibration and teleoperation behavior
+invert_joints:
+  joint_1: true     # shoulder_pan
+  joint_2: true     # shoulder_lift
+  joint_3: true     # elbow_flex
+  # joint_4 is not mapped (fixed position)
+  joint_5: true     # wrist_flex
+  joint_6: true     # wrist_roll
 

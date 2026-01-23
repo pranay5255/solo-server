@@ -103,6 +103,18 @@ def load_realman_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
                 limits = yaml_config.get('limits', {})
                 config['max_relative_target'] = limits.get('max_joint_velocity', config['max_relative_target'])
                 
+                # Extract invert joints mapping
+                invert_joints = yaml_config.get('invert_joints', {})
+                if invert_joints:
+                    config['invert_joints'] = invert_joints
+                
+                # Extract Z safety settings
+                min_z = safety.get('min_z_position')
+                if min_z is not None:
+                    config['min_z_position'] = min_z
+                z_limit_action = safety.get('z_limit_action', 'clamp')
+                config['z_limit_action'] = z_limit_action
+                
             typer.echo(f"📁 Loaded RealMan config from: {config_path}")
         except Exception as e:
             typer.echo(f"⚠️  Could not load config from {config_path}: {e}")
@@ -263,6 +275,9 @@ def create_realman_follower_config(
         fixed_joint_4_position=realman_config.get('fixed_joint_4_position', 0.0),
         gripper_speed=realman_config.get('gripper_speed', 500),
         gripper_force=realman_config.get('gripper_force', 500),
+        invert_joints=realman_config.get('invert_joints', {}),
+        min_z_position=realman_config.get('min_z_position'),
+        z_limit_action=realman_config.get('z_limit_action', 'clamp'),
         id=follower_id or "realman_r1d2_follower",
         cameras=cameras_dict,
     )
@@ -281,8 +296,9 @@ def test_realman_connection(config: Dict[str, Any]) -> bool:
     typer.echo(f"\n🔌 Testing connection to RealMan at {config['ip']}:{config['port']}...")
     
     try:
-        from realman_teleop import RobotController
+        from lerobot.robots.realman_follower.robot_controller import RobotController
         
+        # Create controller instance
         controller = RobotController(
             ip=config['ip'],
             port=config['port'],
@@ -290,6 +306,7 @@ def test_realman_connection(config: Dict[str, Any]) -> bool:
             dof=config['dof'],
         )
         
+        # Try to connect
         if controller.connect():
             typer.echo("✅ Connection successful!")
             
@@ -301,12 +318,12 @@ def test_realman_connection(config: Dict[str, Any]) -> bool:
             controller.disconnect()
             return True
         else:
-            typer.echo("❌ Connection failed - robot may be offline or IP incorrect")
+            typer.echo("❌ Connection failed - robot may be offline or IP/port incorrect")
             return False
             
-    except ImportError:
-        typer.echo("❌ realman_teleop package not installed")
-        typer.echo("   Install with: pip install -e /path/to/realman-teleop")
+    except ImportError as e:
+        typer.echo(f"❌ RobotController not found: {e}")
+        typer.echo("   Install lerobot with realman extras: pip install -e .[realman]")
         return False
     except Exception as e:
         typer.echo(f"❌ Connection error: {e}")

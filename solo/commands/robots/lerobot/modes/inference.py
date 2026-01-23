@@ -65,21 +65,48 @@ def inference_mode(config: dict, auto_use: bool = False):
             typer.echo("1. SO100 (single arm)")
             typer.echo("2. SO101 (single arm)")
             typer.echo("3. Koch (single arm)")
+            typer.echo("4. RealMan R1D2 (follower with SO101 leader)")
+            typer.echo("5. Bimanual SO100")
+            typer.echo("6. Bimanual SO101")
             robot_choice = int(Prompt.ask("Enter robot type", default="2"))
             robot_type_map = {
                 1: "so100",
                 2: "so101",
-                3: "koch"
+                3: "koch",
+                4: "realman_r1d2",
+                5: "bi_so100",
+                6: "bi_so101"
             }
             robot_type = robot_type_map.get(robot_choice, "so101")
             config['robot_type'] = robot_type
-        if not follower_port:
-            follower_port = detect_arm_port("follower")
-            config['follower_port'] = follower_port
         
-        typer.echo("✅ Found calibrated follower arm:")
-        typer.echo(f"   • Robot type: {robot_type.upper()}")
-        typer.echo(f"   • Follower arm: {follower_port}")
+        # Handle port/connection based on robot type
+        from solo.commands.robots.lerobot.config import is_realman_robot
+        if is_realman_robot(robot_type):
+            # RealMan: Load network config
+            from solo.commands.robots.lerobot.realman_config import load_realman_config
+            lerobot_config = config.get('lerobot', {})
+            # Always load fresh config from YAML to pick up changes (like invert_joints)
+            realman_config = load_realman_config()
+            # Merge with any saved network settings (ip/port) if they exist
+            saved_realman = lerobot_config.get('realman_config', {})
+            if saved_realman:
+                realman_config['ip'] = saved_realman.get('ip', realman_config['ip'])
+                realman_config['port'] = saved_realman.get('port', realman_config['port'])
+            config['realman_config'] = realman_config
+            follower_port = None  # Network-based, no USB port
+            
+            typer.echo("✅ Found RealMan follower (network):")
+            typer.echo(f"   • Robot type: {robot_type.upper()}")
+            typer.echo(f"   • Follower: {realman_config.get('ip')}:{realman_config.get('port')}")
+        else:
+            if not follower_port:
+                follower_port = detect_arm_port("follower")
+                config['follower_port'] = follower_port
+            
+            typer.echo("✅ Found calibrated follower arm:")
+            typer.echo(f"   • Robot type: {robot_type.upper()}")
+            typer.echo(f"   • Follower arm: {follower_port}")
         
         # Check if leader arm is available for teleoperation
         use_teleoperation = False
@@ -207,6 +234,13 @@ def inference_mode(config: dict, auto_use: bool = False):
                 if "Could not connect on port" in error_msg or "Make sure you are using the correct port" in error_msg:
                     if attempt < max_retries:
                         typer.echo(f"❌ Connection failed: {error_msg}")
+                        
+                        # For RealMan, skip port retry (network-based, not USB)
+                        from solo.commands.robots.lerobot.config import is_realman_robot
+                        if is_realman_robot(robot_type):
+                            typer.echo("❌ RealMan connection failed. Please check network settings in realman_config.yaml")
+                            return
+                        
                         typer.echo("🔄 Attempting to detect new ports...")
                         
                         # Detect new ports and retry
