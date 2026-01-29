@@ -175,7 +175,7 @@ def replay_mode(config: dict, auto_use: bool = False, replay_options: dict = Non
     from lerobot.datasets.lerobot_dataset import LeRobotDataset
     from lerobot.processor import make_default_robot_action_processor
     from lerobot.robots import make_robot_from_config
-    from lerobot.utils.constants import ACTION
+    from lerobot.utils.constants import ACTION, HF_LEROBOT_HOME
     from lerobot.utils.robot_utils import precise_sleep
     from lerobot.utils.utils import log_say
     
@@ -218,8 +218,59 @@ def replay_mode(config: dict, auto_use: bool = False, replay_options: dict = Non
                 follower_id=follower_id
             )
         
-        # Load dataset
-        dataset = LeRobotDataset(dataset_repo_id, episodes=[episode])
+        # Load dataset - handle local datasets properly
+        # For local datasets (starting with "local/"), check if the path exists
+        # and verify metadata before loading to avoid HuggingFace Hub lookup
+        import json
+        local_dataset_path = HF_LEROBOT_HOME / dataset_repo_id
+        is_local_dataset = dataset_repo_id.startswith("local/")
+        
+        if is_local_dataset:
+            if not local_dataset_path.exists():
+                raise FileNotFoundError(
+                    f"Local dataset not found at: {local_dataset_path}\n"
+                    f"Please check the dataset name and ensure it was recorded locally."
+                )
+            # Verify metadata exists
+            meta_info_path = local_dataset_path / "meta" / "info.json"
+            if not meta_info_path.exists():
+                raise FileNotFoundError(
+                    f"Dataset metadata not found at: {meta_info_path}\n"
+                    f"The dataset may be incomplete or corrupted."
+                )
+            # Load info.json to validate episode number
+            with open(meta_info_path, 'r') as f:
+                info = json.load(f)
+            total_episodes = info.get('total_episodes', 0)
+            if episode >= total_episodes:
+                raise ValueError(
+                    f"Episode {episode} does not exist. Dataset has {total_episodes} episode(s).\n"
+                    f"Valid episode range: 0 to {total_episodes - 1}"
+                )
+            # Check for data files
+            data_path = local_dataset_path / "data"
+            if not data_path.exists() or not any(data_path.rglob("*.parquet")):
+                raise FileNotFoundError(
+                    f"Dataset data files not found at: {data_path}\n"
+                    f"The dataset may be incomplete or corrupted."
+                )
+            typer.echo(f"📂 Loading local dataset from: {local_dataset_path}")
+            typer.echo(f"📊 Dataset has {total_episodes} episode(s)")
+        
+        # Load dataset (default behavior uses HF_LEROBOT_HOME / repo_id as root)
+        try:
+            dataset = LeRobotDataset(dataset_repo_id, episodes=[episode])
+        except Exception as e:
+            error_msg = str(e)
+            # Catch HuggingFace Hub errors for local datasets
+            if is_local_dataset and ("404 Client Error" in error_msg or "Repository Not Found" in error_msg):
+                raise RuntimeError(
+                    f"Failed to load local dataset '{dataset_repo_id}'.\n"
+                    f"Dataset path: {local_dataset_path}\n"
+                    f"This may be due to version compatibility issues or corrupted metadata.\n"
+                    f"Try re-recording the dataset or check the dataset files."
+                ) from e
+            raise
         episode_frames = dataset.hf_dataset.filter(lambda x: x["episode_index"] == episode)
         actions = episode_frames.select_columns(ACTION)
         typer.echo(f"📥 Loaded {len(episode_frames)} frames")
