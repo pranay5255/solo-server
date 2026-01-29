@@ -23,7 +23,7 @@ def inference_mode(config: dict, auto_use: bool = False):
     typer.echo("🔮 Starting LeRobot inference mode...")
     
     # Check for preconfigured inference settings
-    preconfigured = use_preconfigured_args(config, 'inference', 'Inference', auto_use=auto_use)
+    preconfigured, detected_robot_type = use_preconfigured_args(config, 'inference', 'Inference', auto_use=auto_use)
 
     # Initialize variables
     leader_id = None
@@ -57,27 +57,64 @@ def inference_mode(config: dict, auto_use: bool = False):
     
     if not preconfigured:
         # Validate configuration using utility function
-        leader_port, follower_port, leader_calibrated, follower_calibrated, robot_type = validate_lerobot_config(config)
+        leader_port, follower_port, leader_calibrated, follower_calibrated, saved_robot_type = validate_lerobot_config(config)
+        
+        # Use detected robot type if available (e.g., from mismatch detection), otherwise use saved
+        robot_type = detected_robot_type if detected_robot_type else saved_robot_type
         
         if not robot_type:
-            # Ask for robot type
-            typer.echo("\n🤖 Select your robot type:")
-            typer.echo("1. SO100 (single arm)")
-            typer.echo("2. SO101 (single arm)")
-            typer.echo("3. Koch (single arm)")
-            typer.echo("4. RealMan R1D2 (follower with SO101 leader)")
-            typer.echo("5. Bimanual SO100")
-            typer.echo("6. Bimanual SO101")
-            robot_choice = int(Prompt.ask("Enter robot type", default="2"))
-            robot_type_map = {
-                1: "so100",
-                2: "so101",
-                3: "koch",
-                4: "realman_r1d2",
-                5: "bi_so100",
-                6: "bi_so101"
-            }
-            robot_type = robot_type_map.get(robot_choice, "so101")
+            # Try auto-detection first
+            typer.echo("\n🔍 Auto-detecting robot type...")
+            try:
+                from solo.commands.robots.lerobot.scan import auto_detect_robot_type
+                detected_type, port_info = auto_detect_robot_type(verbose=True)
+                
+                if detected_type:
+                    typer.echo(f"\n🤖 Auto-detected robot type: {detected_type.upper()}")
+                    use_detected = Confirm.ask("Use this robot type?", default=True)
+                    if use_detected:
+                        robot_type = detected_type
+                    else:
+                        detected_type = None
+                
+                if not detected_type:
+                    typer.echo("\n🤖 Select your robot type:")
+                    typer.echo("1. SO100 (single arm)")
+                    typer.echo("2. SO101 (single arm)")
+                    typer.echo("3. Koch (single arm)")
+                    typer.echo("4. RealMan R1D2 (follower with SO101 leader)")
+                    typer.echo("5. Bimanual SO100")
+                    typer.echo("6. Bimanual SO101")
+                    robot_choice = int(Prompt.ask("Enter robot type", default="2"))
+                    robot_type_map = {
+                        1: "so100",
+                        2: "so101",
+                        3: "koch",
+                        4: "realman_r1d2",
+                        5: "bi_so100",
+                        6: "bi_so101"
+                    }
+                    robot_type = robot_type_map.get(robot_choice, "so101")
+            except Exception as e:
+                typer.echo(f"⚠️  Auto-detection failed: {e}")
+                typer.echo("\n🤖 Select your robot type:")
+                typer.echo("1. SO100 (single arm)")
+                typer.echo("2. SO101 (single arm)")
+                typer.echo("3. Koch (single arm)")
+                typer.echo("4. RealMan R1D2 (follower with SO101 leader)")
+                typer.echo("5. Bimanual SO100")
+                typer.echo("6. Bimanual SO101")
+                robot_choice = int(Prompt.ask("Enter robot type", default="2"))
+                robot_type_map = {
+                    1: "so100",
+                    2: "so101",
+                    3: "koch",
+                    4: "realman_r1d2",
+                    5: "bi_so100",
+                    6: "bi_so101"
+                }
+                robot_type = robot_type_map.get(robot_choice, "so101")
+            
             config['robot_type'] = robot_type
         
         # Handle port/connection based on robot type
@@ -101,7 +138,7 @@ def inference_mode(config: dict, auto_use: bool = False):
             typer.echo(f"   • Follower: {realman_config.get('ip')}:{realman_config.get('port')}")
         else:
             if not follower_port:
-                follower_port = detect_arm_port("follower")
+                follower_port, _ = detect_arm_port("follower", robot_type=robot_type)
                 config['follower_port'] = follower_port
             
             typer.echo("✅ Found calibrated follower arm:")
@@ -110,23 +147,18 @@ def inference_mode(config: dict, auto_use: bool = False):
         
         # Check if leader arm is available for teleoperation
         use_teleoperation = False
-        known_leader_ids, known_follower_ids = get_known_ids(config)
+        known_leader_ids, known_follower_ids = get_known_ids(config, robot_type=robot_type)
+        from solo.commands.robots.lerobot.config import display_known_ids
         if leader_port and leader_calibrated:
             use_teleoperation = Confirm.ask("Would you like to teleoperate during inference?", default=False)
             if use_teleoperation:
                 default_leader_id = config.get('lerobot', {}).get('leader_id') or f"{robot_type}_leader"
-                if known_leader_ids:
-                    typer.echo("📇 Known leader ids:")
-                    for i, kid in enumerate(known_leader_ids, 1):
-                        typer.echo(f"   {i}. {kid}")
+                display_known_ids(known_leader_ids, "leader", detected_robot_type=robot_type, config=config)
                 leader_id = Prompt.ask("Enter leader id", default=default_leader_id)
                 typer.echo("🎮 Teleoperation enabled - you can override the policy using the leader arm")
 
         default_follower_id = config.get('lerobot', {}).get('follower_id') or f"{robot_type}_follower"
-        if known_follower_ids:
-            typer.echo("📇 Known follower ids:")
-            for i, kid in enumerate(known_follower_ids, 1):
-                typer.echo(f"   {i}. {kid}")
+        display_known_ids(known_follower_ids, "follower", detected_robot_type=robot_type, config=config)
         follower_id = Prompt.ask("Enter follower id", default=default_follower_id)
         
         # Step 1: HuggingFace authentication

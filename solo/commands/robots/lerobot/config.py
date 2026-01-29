@@ -46,22 +46,269 @@ def save_lerobot_config(config: dict, arm_config: dict) -> None:
     typer.echo(f"\nConfiguration saved to {CONFIG_PATH}")
 
 
-def get_known_ids(config: dict) -> Tuple[List[str], List[str]]:
-    """Return known leader and follower ids from config."""
+def migrate_known_ids_to_structured(config: dict) -> bool:
+    """
+    Migrate legacy flat known_leader_ids/known_follower_ids lists 
+    to the new structured known_ids_by_type format.
+    
+    Returns True if migration was performed and saved.
+    """
     lerobot_config = config.get('lerobot', {})
-    return lerobot_config.get('known_leader_ids', []), lerobot_config.get('known_follower_ids', [])
+    
+    # Check if migration is needed
+    legacy_leaders = lerobot_config.get('known_leader_ids', [])
+    legacy_followers = lerobot_config.get('known_follower_ids', [])
+    
+    if not legacy_leaders and not legacy_followers:
+        return False  # Nothing to migrate
+    
+    if 'known_ids_by_type' not in lerobot_config:
+        lerobot_config['known_ids_by_type'] = {}
+    
+    known_ids_by_type = lerobot_config['known_ids_by_type']
+    
+    # Migrate leaders
+    for lid in legacy_leaders:
+        inferred_type = infer_robot_type_from_id(lid) or 'unknown'
+        if inferred_type not in known_ids_by_type:
+            known_ids_by_type[inferred_type] = {'leaders': [], 'followers': []}
+        if lid not in known_ids_by_type[inferred_type].get('leaders', []):
+            known_ids_by_type[inferred_type].setdefault('leaders', []).append(lid)
+    
+    # Migrate followers
+    for fid in legacy_followers:
+        inferred_type = infer_robot_type_from_id(fid) or 'unknown'
+        if inferred_type not in known_ids_by_type:
+            known_ids_by_type[inferred_type] = {'leaders': [], 'followers': []}
+        if fid not in known_ids_by_type[inferred_type].get('followers', []):
+            known_ids_by_type[inferred_type].setdefault('followers', []).append(fid)
+    
+    config['lerobot']['known_ids_by_type'] = known_ids_by_type
+    
+    # Save updated config
+    with open(CONFIG_PATH, 'w') as f:
+        json.dump(config, f, indent=4)
+    
+    return True
 
 
-def add_known_id(config: dict, arm_type: str, arm_id: str) -> None:
-    """Persist a discovered or chosen id for leader/follower in the config."""
+def infer_robot_type_from_id(arm_id: str) -> Optional[str]:
+    """Infer robot type from arm ID name pattern."""
+    arm_id_lower = arm_id.lower()
+    if 'koch' in arm_id_lower:
+        return 'koch'
+    elif 'so101' in arm_id_lower:
+        return 'so101'
+    elif 'so100' in arm_id_lower:
+        return 'so100'
+    elif 'realman' in arm_id_lower or 'r1d2' in arm_id_lower:
+        return 'realman'
+    elif 'bi_so100' in arm_id_lower or 'biso100' in arm_id_lower:
+        return 'bi_so100'
+    elif 'bi_so101' in arm_id_lower or 'biso101' in arm_id_lower:
+        return 'bi_so101'
+    return None
+
+
+def get_known_ids(config: dict, robot_type: Optional[str] = None) -> Tuple[List[str], List[str]]:
+    """
+    Return known leader and follower ids from config.
+    
+    If robot_type is provided, returns only IDs for that robot type.
+    Otherwise returns all IDs (for backward compatibility).
+    
+    New structure: lerobot.known_ids_by_type = {
+        "koch": {"leaders": [...], "followers": [...]},
+        "so101": {"leaders": [...], "followers": [...]}
+    }
+    
+    Also supports legacy flat lists for backward compatibility.
+    """
+    lerobot_config = config.get('lerobot', {})
+    
+    # Check for new structure first
+    known_ids_by_type = lerobot_config.get('known_ids_by_type', {})
+    
+    if robot_type and robot_type in known_ids_by_type:
+        # Return IDs specific to this robot type
+        type_ids = known_ids_by_type[robot_type]
+        return type_ids.get('leaders', []), type_ids.get('followers', [])
+    
+    # If robot_type specified but not found, or no robot_type specified
+    # Aggregate all IDs from all robot types
+    all_leaders = []
+    all_followers = []
+    
+    for rtype, type_ids in known_ids_by_type.items():
+        for lid in type_ids.get('leaders', []):
+            if lid not in all_leaders:
+                all_leaders.append(lid)
+        for fid in type_ids.get('followers', []):
+            if fid not in all_followers:
+                all_followers.append(fid)
+    
+    # Also include legacy flat lists for backward compatibility
+    legacy_leaders = lerobot_config.get('known_leader_ids', [])
+    legacy_followers = lerobot_config.get('known_follower_ids', [])
+    
+    for lid in legacy_leaders:
+        if lid not in all_leaders:
+            all_leaders.append(lid)
+    for fid in legacy_followers:
+        if fid not in all_followers:
+            all_followers.append(fid)
+    
+    return all_leaders, all_followers
+
+
+def get_known_ids_by_type(config: dict) -> Dict[str, Dict[str, List[str]]]:
+    """
+    Return all known IDs organized by robot type.
+    
+    Returns: {"koch": {"leaders": [...], "followers": [...]}, ...}
+    """
+    lerobot_config = config.get('lerobot', {})
+    known_ids_by_type = lerobot_config.get('known_ids_by_type', {}).copy()
+    
+    # Migrate legacy flat lists by inferring robot type from ID names
+    legacy_leaders = lerobot_config.get('known_leader_ids', [])
+    legacy_followers = lerobot_config.get('known_follower_ids', [])
+    
+    for lid in legacy_leaders:
+        inferred_type = infer_robot_type_from_id(lid) or 'unknown'
+        if inferred_type not in known_ids_by_type:
+            known_ids_by_type[inferred_type] = {'leaders': [], 'followers': []}
+        if lid not in known_ids_by_type[inferred_type].get('leaders', []):
+            known_ids_by_type[inferred_type].setdefault('leaders', []).append(lid)
+    
+    for fid in legacy_followers:
+        inferred_type = infer_robot_type_from_id(fid) or 'unknown'
+        if inferred_type not in known_ids_by_type:
+            known_ids_by_type[inferred_type] = {'leaders': [], 'followers': []}
+        if fid not in known_ids_by_type[inferred_type].get('followers', []):
+            known_ids_by_type[inferred_type].setdefault('followers', []).append(fid)
+    
+    return known_ids_by_type
+
+
+def format_id_with_robot_type(arm_id: str, detected_robot_type: Optional[str] = None) -> str:
+    """Format an arm ID with its inferred or detected robot type."""
+    robot_type = infer_robot_type_from_id(arm_id)
+    if robot_type:
+        return f"{arm_id} ({robot_type})"
+    elif detected_robot_type:
+        # If ID doesn't have robot type in name, show detected type
+        return f"{arm_id} ({detected_robot_type}?)"
+    return arm_id
+
+
+def display_known_ids(known_ids: List[str], arm_type: str, detected_robot_type: Optional[str] = None, config: Optional[dict] = None) -> None:
+    """Display known IDs organized by robot type.
+    
+    Shows IDs for the detected robot type first (if any), then IDs for other robot types.
+    
+    Args:
+        known_ids: List of known arm IDs (for backward compatibility, can be empty if using config)
+        arm_type: "leader" or "follower"
+        detected_robot_type: Currently detected robot type from hardware scan
+        config: Config dictionary to get IDs organized by type (preferred)
+    """
+    import typer
+    
+    # Try to auto-detect robot type if not provided
+    if detected_robot_type is None:
+        try:
+            from solo.commands.robots.lerobot.scan import auto_detect_robot_type
+            detected_robot_type, _ = auto_detect_robot_type(verbose=False)
+        except Exception:
+            pass
+    
+    # If config provided, use structured IDs by type
+    if config:
+        ids_by_type = get_known_ids_by_type(config)
+        key = 'leaders' if arm_type == 'leader' else 'followers'
+        
+        # Collect all IDs with their robot types, prioritizing detected type
+        all_ids_with_types = []
+        
+        # First add IDs from detected robot type
+        if detected_robot_type and detected_robot_type in ids_by_type:
+            for arm_id in ids_by_type[detected_robot_type].get(key, []):
+                all_ids_with_types.append((arm_id, detected_robot_type, True))
+        
+        # Then add IDs from other robot types
+        for rtype, type_ids in ids_by_type.items():
+            if rtype != detected_robot_type:
+                for arm_id in type_ids.get(key, []):
+                    # Check if already added
+                    if not any(aid == arm_id for aid, _, _ in all_ids_with_types):
+                        all_ids_with_types.append((arm_id, rtype, False))
+        
+        if all_ids_with_types:
+            if detected_robot_type:
+                typer.echo(f"📇 Known {arm_type} ids (detected: {detected_robot_type}):")
+            else:
+                typer.echo(f"📇 Known {arm_type} ids:")
+            
+            for i, (arm_id, rtype, is_detected) in enumerate(all_ids_with_types, 1):
+                if rtype == 'unknown':
+                    typer.echo(f"   {i}. {arm_id}")
+                elif is_detected:
+                    typer.echo(f"   {i}. {arm_id} ({rtype}) ✓")
+                else:
+                    typer.echo(f"   {i}. {arm_id} ({rtype})")
+        return
+    
+    # Fallback to old behavior with flat list
+    if known_ids:
+        if detected_robot_type:
+            typer.echo(f"📇 Known {arm_type} ids (detected: {detected_robot_type}):")
+        else:
+            typer.echo(f"📇 Known {arm_type} ids:")
+        for i, kid in enumerate(known_ids, 1):
+            formatted = format_id_with_robot_type(kid, detected_robot_type)
+            typer.echo(f"   {i}. {formatted}")
+
+
+def add_known_id(config: dict, arm_type: str, arm_id: str, robot_type: Optional[str] = None) -> None:
+    """
+    Persist a discovered or chosen id for leader/follower in the config.
+    
+    Args:
+        config: Main configuration dictionary
+        arm_type: "leader" or "follower"
+        arm_id: The arm ID to add
+        robot_type: Robot type to associate with this ID (if None, inferred from ID name)
+    """
     if 'lerobot' not in config:
         config['lerobot'] = {}
-    key = 'known_leader_ids' if arm_type == 'leader' else 'known_follower_ids'
-    existing: List[str] = config['lerobot'].get(key, [])
+    
+    # Determine robot type - use provided, infer from ID, or default to 'unknown'
+    effective_robot_type = robot_type or infer_robot_type_from_id(arm_id) or 'unknown'
+    
+    # Initialize known_ids_by_type structure if needed
+    if 'known_ids_by_type' not in config['lerobot']:
+        config['lerobot']['known_ids_by_type'] = {}
+    
+    if effective_robot_type not in config['lerobot']['known_ids_by_type']:
+        config['lerobot']['known_ids_by_type'][effective_robot_type] = {'leaders': [], 'followers': []}
+    
+    # Add to appropriate list
+    key = 'leaders' if arm_type == 'leader' else 'followers'
+    existing: List[str] = config['lerobot']['known_ids_by_type'][effective_robot_type].get(key, [])
+    
     if arm_id and arm_id not in existing:
         existing.append(arm_id)
-        config['lerobot'][key] = existing
-        # Save immediately to disk without changing other fields
+        config['lerobot']['known_ids_by_type'][effective_robot_type][key] = existing
+        
+        # Also add to legacy flat list for backward compatibility
+        legacy_key = 'known_leader_ids' if arm_type == 'leader' else 'known_follower_ids'
+        legacy_list: List[str] = config['lerobot'].get(legacy_key, [])
+        if arm_id not in legacy_list:
+            legacy_list.append(arm_id)
+            config['lerobot'][legacy_key] = legacy_list
+        
+        # Save immediately to disk
         with open(CONFIG_PATH, 'w') as f:
             json.dump(config, f, indent=4)
 

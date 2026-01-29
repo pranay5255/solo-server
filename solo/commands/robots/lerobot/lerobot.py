@@ -174,7 +174,7 @@ def motor_setup_mode(config: dict, arm_type: str = None):
             leader_port = existing_leader_port if reuse_all and existing_leader_port else None
             if not leader_port:
                 typer.echo("\n📟 Setting up SO101 Leader Arm (USB)")
-                leader_port = detect_arm_port("leader")
+                leader_port, _ = detect_arm_port("leader", robot_type="so101")
             
             if not leader_port:
                 typer.echo("❌ Failed to detect SO101 leader arm. Skipping leader setup.")
@@ -282,7 +282,7 @@ def motor_setup_mode(config: dict, arm_type: str = None):
             # Use consolidated decision for leader port
             leader_port = existing_leader_port if reuse_all and existing_leader_port else None
             if not leader_port:
-                leader_port = detect_arm_port("leader")
+                leader_port, _ = detect_arm_port("leader", robot_type=robot_type)
             
             if not leader_port:
                 typer.echo("❌ Failed to detect leader arm. Skipping leader setup.")
@@ -304,7 +304,7 @@ def motor_setup_mode(config: dict, arm_type: str = None):
             # Use consolidated decision for follower port
             follower_port = existing_follower_port if reuse_all and existing_follower_port else None
             if not follower_port:
-                follower_port = detect_arm_port("follower")
+                follower_port, _ = detect_arm_port("follower", robot_type=robot_type)
             
             if not follower_port:
                 typer.echo("❌ Failed to detect follower arm. Skipping follower setup.")

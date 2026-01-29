@@ -302,24 +302,60 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
     if reuse_all and existing_robot_type:
         robot_type = existing_robot_type
     else:
-        # Ask for robot type
-        typer.echo("\n🤖 Select your robot type:")
-        typer.echo("1. SO100 (single arm)")
-        typer.echo("2. SO101 (single arm)")
-        typer.echo("3. Koch (single arm)")
-        typer.echo("4. Bimanual SO100")
-        typer.echo("5. Bimanual SO101")
-        typer.echo("6. RealMan R1D2 (follower with SO101 leader)")
-        robot_choice = int(Prompt.ask("Enter robot type", default="1"))
-        robot_type_map = {
-            1: "so100",
-            2: "so101",
-            3: "koch",
-            4: "bi_so100",
-            5: "bi_so101",
-            6: "realman_r1d2"
-        }
-        robot_type = robot_type_map.get(robot_choice, "so100")
+        # Try auto-detection first
+        typer.echo("\n🔍 Auto-detecting robot type...")
+        try:
+            from solo.commands.robots.lerobot.scan import auto_detect_robot_type
+            detected_type, port_info = auto_detect_robot_type(verbose=True)
+            
+            if detected_type:
+                # Ask user to confirm auto-detected type
+                typer.echo(f"\n🤖 Auto-detected robot type: {detected_type.upper()}")
+                use_detected = Confirm.ask("Use this robot type?", default=True)
+                if use_detected:
+                    robot_type = detected_type
+                else:
+                    detected_type = None
+            
+            if not detected_type:
+                # Manual selection
+                typer.echo("\n🤖 Select your robot type:")
+                typer.echo("1. SO100 (single arm)")
+                typer.echo("2. SO101 (single arm)")
+                typer.echo("3. Koch (single arm)")
+                typer.echo("4. Bimanual SO100")
+                typer.echo("5. Bimanual SO101")
+                typer.echo("6. RealMan R1D2 (follower with SO101 leader)")
+                robot_choice = int(Prompt.ask("Enter robot type", default="2"))
+                robot_type_map = {
+                    1: "so100",
+                    2: "so101",
+                    3: "koch",
+                    4: "bi_so100",
+                    5: "bi_so101",
+                    6: "realman_r1d2"
+                }
+                robot_type = robot_type_map.get(robot_choice, "so101")
+        except Exception as e:
+            typer.echo(f"⚠️  Auto-detection failed: {e}")
+            # Fall back to manual selection
+            typer.echo("\n🤖 Select your robot type:")
+            typer.echo("1. SO100 (single arm)")
+            typer.echo("2. SO101 (single arm)")
+            typer.echo("3. Koch (single arm)")
+            typer.echo("4. Bimanual SO100")
+            typer.echo("5. Bimanual SO101")
+            typer.echo("6. RealMan R1D2 (follower with SO101 leader)")
+            robot_choice = int(Prompt.ask("Enter robot type", default="2"))
+            robot_type_map = {
+                1: "so100",
+                2: "so101",
+                3: "koch",
+                4: "bi_so100",
+                5: "bi_so101",
+                6: "realman_r1d2"
+            }
+            robot_type = robot_type_map.get(robot_choice, "so101")
     
     config['robot_type'] = robot_type
     is_bimanual = is_bimanual_robot(robot_type)
@@ -354,18 +390,16 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
             leader_port = existing_leader_port if reuse_all and existing_leader_port else None
             if not leader_port:
                 typer.echo("\n🔍 Detecting SO101 leader arm...")
-                leader_port = detect_arm_port("leader", robot_type="so101")
+                leader_port, _ = detect_arm_port("leader", robot_type="so101")
             
             if not leader_port:
                 typer.echo("❌ Failed to detect SO101 leader arm. Skipping leader calibration.")
             else:
                 config['leader_port'] = leader_port
-                known_leader_ids, _ = get_known_ids(main_config or {})
+                known_leader_ids, _ = get_known_ids(main_config or {}, robot_type="so101")
                 default_leader_id = (main_config or {}).get('lerobot', {}).get('leader_id') or "so101_leader"
-                if known_leader_ids:
-                    typer.echo("📇 Known leader ids:")
-                    for i, kid in enumerate(known_leader_ids, 1):
-                        typer.echo(f"   {i}. {kid}")
+                from solo.commands.robots.lerobot.config import display_known_ids
+                display_known_ids(known_leader_ids, "leader", detected_robot_type="so101", config=main_config or {})
                 leader_id = Prompt.ask("Enter leader id", default=default_leader_id)
                 
                 # Calibrate SO101 leader
@@ -374,7 +408,7 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
                     config['leader_id'] = leader_id
                     # Add known ID - ensure we have proper main_config
                     target_config = main_config if main_config is not None else {}
-                    add_known_id(target_config, 'leader', leader_id)
+                    add_known_id(target_config, 'leader', leader_id, robot_type="so101")
                     if main_config is None:
                         main_config = target_config
                 else:
@@ -399,18 +433,16 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
                 config['realman_config'] = realman_cfg  # Also store at top level for easy access
                 
                 # Set follower ID
-                _, known_follower_ids = get_known_ids(main_config or {})
+                _, known_follower_ids = get_known_ids(main_config or {}, robot_type=robot_type)
                 default_follower_id = (main_config or {}).get('lerobot', {}).get('follower_id') or "realman_r1d2_follower"
-                if known_follower_ids:
-                    typer.echo("📇 Known follower ids:")
-                    for i, kid in enumerate(known_follower_ids, 1):
-                        typer.echo(f"   {i}. {kid}")
+                from solo.commands.robots.lerobot.config import display_known_ids
+                display_known_ids(known_follower_ids, "follower", detected_robot_type=robot_type, config=main_config or {})
                 follower_id = Prompt.ask("Enter follower id", default=default_follower_id)
                 config['follower_id'] = follower_id
                 
                 # Add known ID - ensure we have proper main_config
                 target_config = main_config if main_config is not None else {}
-                add_known_id(target_config, 'follower', follower_id)
+                add_known_id(target_config, 'follower', follower_id, robot_type=robot_type)
                 if main_config is None:
                     main_config = target_config
                 
@@ -448,19 +480,17 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
                 config['right_leader_port'] = right_leader_port
                 
                 # Select leader id
-                known_leader_ids, _ = get_known_ids(main_config or {})
+                known_leader_ids, _ = get_known_ids(main_config or {}, robot_type=robot_type)
                 default_leader_id = (main_config or {}).get('lerobot', {}).get('leader_id') or f"{robot_type}_leader"
-                if known_leader_ids:
-                    typer.echo("📇 Known leader ids:")
-                    for i, kid in enumerate(known_leader_ids, 1):
-                        typer.echo(f"   {i}. {kid}")
+                from solo.commands.robots.lerobot.config import display_known_ids
+                display_known_ids(known_leader_ids, "leader", detected_robot_type=robot_type, config=main_config or {})
                 leader_id = Prompt.ask("Enter leader id", default=default_leader_id)
                 
                 # Calibrate bimanual leader arms
                 if calibrate_bimanual_arm("leader", left_leader_port, right_leader_port, robot_type, leader_id):
                     config['leader_calibrated'] = True
                     config['leader_id'] = leader_id
-                    add_known_id(main_config or config, 'leader', leader_id)
+                    add_known_id(main_config or config, 'leader', leader_id, robot_type=robot_type)
                 else:
                     typer.echo("❌ Bimanual leader arms calibration failed.")
                     config['leader_calibrated'] = False
@@ -480,19 +510,17 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
                 config['right_follower_port'] = right_follower_port
                 
                 # Select follower id
-                _, known_follower_ids = get_known_ids(main_config or {})
+                _, known_follower_ids = get_known_ids(main_config or {}, robot_type=robot_type)
                 default_follower_id = (main_config or {}).get('lerobot', {}).get('follower_id') or f"{robot_type}_follower"
-                if known_follower_ids:
-                    typer.echo("📇 Known follower ids:")
-                    for i, kid in enumerate(known_follower_ids, 1):
-                        typer.echo(f"   {i}. {kid}")
+                from solo.commands.robots.lerobot.config import display_known_ids
+                display_known_ids(known_follower_ids, "follower", detected_robot_type=robot_type, config=main_config or {})
                 follower_id = Prompt.ask("Enter follower id", default=default_follower_id)
                 
                 # Calibrate bimanual follower arms
                 if calibrate_bimanual_arm("follower", left_follower_port, right_follower_port, robot_type, follower_id):
                     config['follower_calibrated'] = True
                     config['follower_id'] = follower_id
-                    add_known_id(main_config or config, 'follower', follower_id)
+                    add_known_id(main_config or config, 'follower', follower_id, robot_type=robot_type)
                 else:
                     typer.echo("❌ Bimanual follower arms calibration failed.")
                     config['follower_calibrated'] = False
@@ -503,26 +531,28 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
             # Use consolidated decision for leader port
             leader_port = existing_leader_port if reuse_all and existing_leader_port else None
             if not leader_port:
-                leader_port = detect_arm_port("leader", robot_type=robot_type)
+                leader_port, detected_type = detect_arm_port("leader", robot_type=robot_type)
+                # Update robot_type if auto-detected and not already set
+                if detected_type and robot_type is None:
+                    robot_type = detected_type
+                    config['robot_type'] = robot_type
             
             if not leader_port:
                 typer.echo("❌ Failed to detect leader arm. Skipping leader calibration.")
             else:
                 config['leader_port'] = leader_port
                 # Select leader id
-                known_leader_ids, _ = get_known_ids(main_config or {})
+                known_leader_ids, _ = get_known_ids(main_config or {}, robot_type=robot_type)
                 default_leader_id = (main_config or {}).get('lerobot', {}).get('leader_id') or f"{robot_type}_leader"
-                if known_leader_ids:
-                    typer.echo("📇 Known leader ids:")
-                    for i, kid in enumerate(known_leader_ids, 1):
-                        typer.echo(f"   {i}. {kid}")
+                from solo.commands.robots.lerobot.config import display_known_ids
+                display_known_ids(known_leader_ids, "leader", detected_robot_type=robot_type, config=main_config or {})
                 leader_id = Prompt.ask("Enter leader id", default=default_leader_id)
                 
                 # Calibrate leader arm
                 if calibrate_arm("leader", leader_port, robot_type, leader_id):
                     config['leader_calibrated'] = True
                     config['leader_id'] = leader_id
-                    add_known_id(main_config or config, 'leader', leader_id)
+                    add_known_id(main_config or config, 'leader', leader_id, robot_type=robot_type)
                 else:
                     typer.echo("❌ Leader arm calibration failed.")
                     config['leader_calibrated'] = False
@@ -531,26 +561,28 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
             # Use consolidated decision for follower port
             follower_port = existing_follower_port if reuse_all and existing_follower_port else None
             if not follower_port:
-                follower_port = detect_arm_port("follower", robot_type=robot_type)
+                follower_port, detected_type = detect_arm_port("follower", robot_type=robot_type)
+                # Update robot_type if auto-detected and not already set
+                if detected_type and robot_type is None:
+                    robot_type = detected_type
+                    config['robot_type'] = robot_type
             
             if not follower_port:
                 typer.echo("❌ Failed to detect follower arm. Skipping follower calibration.")
             else:
                 config['follower_port'] = follower_port
                 # Select follower id
-                _, known_follower_ids = get_known_ids(main_config or {})
+                _, known_follower_ids = get_known_ids(main_config or {}, robot_type=robot_type)
                 default_follower_id = (main_config or {}).get('lerobot', {}).get('follower_id') or f"{robot_type}_follower"
-                if known_follower_ids:
-                    typer.echo("📇 Known follower ids:")
-                    for i, kid in enumerate(known_follower_ids, 1):
-                        typer.echo(f"   {i}. {kid}")
+                from solo.commands.robots.lerobot.config import display_known_ids
+                display_known_ids(known_follower_ids, "follower", detected_robot_type=robot_type, config=main_config or {})
                 follower_id = Prompt.ask("Enter follower id", default=default_follower_id)
                 
                 # Calibrate follower arm
                 if calibrate_arm("follower", follower_port, robot_type, follower_id):
                     config['follower_calibrated'] = True
                     config['follower_id'] = follower_id
-                    add_known_id(main_config or config, 'follower', follower_id)
+                    add_known_id(main_config or config, 'follower', follower_id, robot_type=robot_type)
                 else:
                     typer.echo("❌ Follower arm calibration failed.")
                     config['follower_calibrated'] = False

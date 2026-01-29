@@ -34,6 +34,10 @@ def robo(
         try:
             with open(CONFIG_PATH, 'r') as f:
                 config = json.load(f)
+            
+            # Migrate legacy known_ids format to structured format (by robot type)
+            from solo.commands.robots.lerobot.config import migrate_known_ids_to_structured
+            migrate_known_ids_to_structured(config)
         except (json.JSONDecodeError, FileNotFoundError):
             config = {}
     

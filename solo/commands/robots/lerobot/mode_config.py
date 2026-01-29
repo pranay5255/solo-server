@@ -51,9 +51,11 @@ def save_mode_config(config: dict, mode: str, mode_config: Dict) -> None:
     
 
 
-def use_preconfigured_args(config: dict, mode: str, mode_name: str, auto_use: bool = False) -> Optional[Dict]:
+def use_preconfigured_args(config: dict, mode: str, mode_name: str, auto_use: bool = False) -> tuple[Optional[Dict], Optional[str]]:
     """
     Check if preconfigured arguments exist for a mode and ask user if they want to use them.
+    
+    Also validates that the saved robot_type matches the currently connected hardware.
     
     Args:
         config: Main configuration dictionary
@@ -62,29 +64,68 @@ def use_preconfigured_args(config: dict, mode: str, mode_name: str, auto_use: bo
         auto_use: If True, automatically use preconfigured settings without prompting
     
     Returns:
-        Preconfigured arguments if user chooses to use them, None otherwise
+        Tuple of (preconfigured_args, detected_robot_type):
+        - preconfigured_args: Preconfigured arguments if user chooses to use them, None otherwise
+        - detected_robot_type: The detected robot type from hardware (useful when mismatch detected)
     """
     mode_config = load_mode_config(config, mode)
     
+    # Always try to detect current hardware
+    detected_type = None
+    try:
+        from solo.commands.robots.lerobot.scan import auto_detect_robot_type
+        detected_type, _ = auto_detect_robot_type(verbose=False)
+    except Exception:
+        pass
+    
     if mode_config:
+        saved_robot_type = mode_config.get('robot_type')
+        
+        # Show current hardware detection status
         typer.echo(f"\n📋 Found preconfigured {mode_name} settings:")
         
-        # Display the configuration in a user-friendly way
+        # Display robot type prominently first, with mismatch warning
+        if saved_robot_type:
+            if detected_type and detected_type != saved_robot_type:
+                typer.echo(f"   ⚠️  robot_type: {saved_robot_type.upper()} (MISMATCH - detected {detected_type.upper()})")
+            else:
+                typer.echo(f"   • robot_type: {saved_robot_type.upper()}")
+        elif detected_type:
+            typer.echo(f"   • robot_type: (not saved, detected {detected_type.upper()})")
+        
+        # Display the rest of the configuration
         for key, value in mode_config.items():
+            if key == 'robot_type':
+                continue  # Already displayed above
             if isinstance(value, dict):
                 typer.echo(f"   • {key}: {len(value)} items")
             else:
                 typer.echo(f"   • {key}: {value}")
         
+        # Validate robot type against currently connected hardware
+        if saved_robot_type and detected_type and detected_type != saved_robot_type:
+            typer.echo(f"\n⚠️  Robot type mismatch detected!")
+            typer.echo(f"   Your saved configuration is for {saved_robot_type.upper()}")
+            typer.echo(f"   But the connected hardware is {detected_type.upper()}")
+            typer.echo(f"   Using the wrong config will cause motor errors.")
+            
+            use_detected = Confirm.ask(f"Use detected {detected_type.upper()} instead?", default=True)
+            if use_detected:
+                typer.echo(f"✅ Will use {detected_type.upper()} configuration")
+                # Return None for config but pass detected_type so caller uses it
+                return (None, detected_type)
+            else:
+                typer.echo(f"⚠️  Continuing with saved {saved_robot_type.upper()} config (may fail)")
+        
         # If auto_use is True, skip the prompt and use configs directly
         if auto_use:
             typer.echo(f"\n✅ Using preconfigured {mode_name} settings")
-            return mode_config
+            return (mode_config, detected_type)
         else:
             typer.echo(f"\nRunning {mode_name} with new settings, or use -y to automatically use preconfigured settings")
-            return None
+            return (None, detected_type)
     
-    return None
+    return (None, detected_type)
 
 
 def save_teleop_config(config: dict, leader_port: str, follower_port: str, robot_type: str, camera_config: Dict, leader_id: str | None = None, follower_id: str | None = None) -> None:

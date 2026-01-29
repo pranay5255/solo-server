@@ -19,7 +19,7 @@ def training_mode(config: dict, auto_use: bool = False):
     typer.echo("🎓 Starting LeRobot training mode...")
     
     # Check for preconfigured training settings
-    preconfigured = use_preconfigured_args(config, 'training', 'Training', auto_use=auto_use)
+    preconfigured, detected_robot_type = use_preconfigured_args(config, 'training', 'Training', auto_use=auto_use)
     training_args = {}
     
     if preconfigured:
