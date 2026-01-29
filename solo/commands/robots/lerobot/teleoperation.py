@@ -1,5 +1,7 @@
 """
 Teleoperation utilities for LeRobot
+
+Note: Heavy lerobot imports are done lazily inside functions to speed up CLI startup.
 """
 
 import typer
@@ -15,11 +17,13 @@ from solo.commands.robots.lerobot.config import (
     is_realman_robot,
     create_bimanual_leader_config,
     create_bimanual_follower_config,
+    validate_lerobot_config,
 )
 from solo.commands.robots.lerobot.mode_config import use_preconfigured_args
 from solo.commands.robots.lerobot.ports import detect_arm_port, detect_and_retry_ports, detect_bimanual_arm_ports
-from lerobot.scripts.lerobot_teleoperate import TeleoperateConfig, teleoperate
-from solo.commands.robots.lerobot.config import validate_lerobot_config
+
+# Heavy lerobot imports are done lazily inside functions:
+# - from lerobot.scripts.lerobot_teleoperate import TeleoperateConfig, teleoperate
 
 def teleoperation(config: dict = None, auto_use: bool = False) -> bool:
     leader_id = None
@@ -246,6 +250,11 @@ def teleoperation(config: dict = None, auto_use: bool = False) -> bool:
                 camera_config,
                 follower_id=follower_id,
             )
+        
+        # Lazy import heavy lerobot modules
+        typer.echo("\n⏳ Loading LeRobot modules...")
+        from lerobot.scripts.lerobot_teleoperate import TeleoperateConfig, teleoperate
+        typer.echo("✅ LeRobot modules loaded.\n")
         
         # Create teleoperation config
         teleop_config = TeleoperateConfig(

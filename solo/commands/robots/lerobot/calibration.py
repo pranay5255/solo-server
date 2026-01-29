@@ -1,14 +1,15 @@
 """
 Calibration utilities for LeRobot
+
+Note: Heavy lerobot imports are done lazily inside functions to speed up CLI startup.
 """
 
 import typer
 from rich.prompt import Prompt, Confirm
 from typing import Dict
 from typing import Optional
-from lerobot.scripts.lerobot_calibrate import calibrate, CalibrateConfig
-from lerobot.teleoperators import make_teleoperator_from_config
-from lerobot.robots import make_robot_from_config
+
+# Light imports - these don't load torch/transformers
 from solo.commands.robots.lerobot.ports import detect_arm_port, detect_bimanual_arm_ports
 from solo.commands.robots.lerobot.config import (
     get_robot_config_classes,
@@ -21,13 +22,23 @@ from solo.commands.robots.lerobot.config import (
     create_bimanual_follower_config,
 )
 from solo.commands.robots.lerobot.realman_config import load_realman_config, prompt_realman_config, test_realman_connection
-from lerobot.robots.realman_follower import RealManFollowerConfig
+
+# Heavy lerobot imports are done lazily inside functions:
+# - from lerobot.scripts.lerobot_calibrate import calibrate, CalibrateConfig
+# - from lerobot.teleoperators import make_teleoperator_from_config
+# - from lerobot.robots import make_robot_from_config
+# - from lerobot.robots.realman_follower import RealManFollowerConfig
 
 def calibrate_arm(arm_type: str, port: str, robot_type: str = "so100", arm_id: Optional[str] = None) -> bool:
     """
     Calibrate a specific arm using the lerobot calibration system
     """
-    typer.echo(f"\n🔧 Calibrating {arm_type} arm on port {port}...")
+    # Lazy import heavy lerobot modules
+    typer.echo("\n⏳ Loading LeRobot modules...")
+    from lerobot.scripts.lerobot_calibrate import calibrate, CalibrateConfig
+    typer.echo("✅ LeRobot modules loaded.\n")
+    
+    typer.echo(f"🔧 Calibrating {arm_type} arm on port {port}...")
     
     try:
         # Determine the appropriate config class based on arm type and robot type
@@ -68,6 +79,12 @@ def calibrate_realman_follower(realman_cfg: Dict, follower_id: str) -> bool:
     Returns:
         True if calibration succeeded, False otherwise
     """
+    # Lazy import heavy lerobot modules
+    typer.echo("\n⏳ Loading LeRobot modules...")
+    from lerobot.robots import make_robot_from_config
+    from lerobot.robots.realman_follower import RealManFollowerConfig
+    typer.echo("✅ LeRobot modules loaded.\n")
+    
     try:
         # Create RealManFollowerConfig
         follower_config = RealManFollowerConfig(
@@ -113,7 +130,12 @@ def calibrate_bimanual_arm(
     """
     Calibrate a bimanual arm (both left and right) using the lerobot calibration system
     """
-    typer.echo(f"\n🔧 Calibrating bimanual {arm_type} arms...")
+    # Lazy import heavy lerobot modules
+    typer.echo("\n⏳ Loading LeRobot modules...")
+    from lerobot.scripts.lerobot_calibrate import calibrate, CalibrateConfig
+    typer.echo("✅ LeRobot modules loaded.\n")
+    
+    typer.echo(f"🔧 Calibrating bimanual {arm_type} arms...")
     typer.echo(f"   • Left arm port: {left_port}")
     typer.echo(f"   • Right arm port: {right_port}")
     
@@ -162,6 +184,11 @@ def setup_motors_for_arm(arm_type: str, port: str, robot_type: str = "so100") ->
     Setup motor IDs for a specific arm (leader or follower)
     Returns True if successful, False otherwise
     """
+    # Lazy import heavy lerobot modules
+    typer.echo("\n⏳ Loading LeRobot modules...")
+    from lerobot.teleoperators import make_teleoperator_from_config
+    from lerobot.robots import make_robot_from_config
+    typer.echo("✅ LeRobot modules loaded.\n")
 
     try:
         # Determine the appropriate config class based on arm type and robot type
@@ -206,7 +233,13 @@ def setup_motors_for_bimanual_arm(
     Setup motor IDs for bimanual arm (both left and right)
     Returns True if successful, False otherwise
     """
-    typer.echo(f"\n🔧 Setting up motors for bimanual {arm_type} arms...")
+    # Lazy import heavy lerobot modules
+    typer.echo("\n⏳ Loading LeRobot modules...")
+    from lerobot.teleoperators import make_teleoperator_from_config
+    from lerobot.robots import make_robot_from_config
+    typer.echo("✅ LeRobot modules loaded.\n")
+    
+    typer.echo(f"🔧 Setting up motors for bimanual {arm_type} arms...")
     typer.echo(f"   • Left arm port: {left_port}")
     typer.echo(f"   • Right arm port: {right_port}")
     
@@ -318,6 +351,22 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
                     detected_type = None
             
             if not detected_type:
+                # Check if no ports were found at all - warn user
+                if not port_info:
+                    typer.echo("\n⚠️  No robot arms detected on any serial port.")
+                    typer.echo("   This could mean:")
+                    typer.echo("   • Robot arm is not connected via USB")
+                    typer.echo("   • Robot arm is not powered on")
+                    typer.echo("   • USB drivers are not installed")
+                    typer.echo("   • Another application is using the port")
+                    
+                    # Check if this might be a RealMan setup (network-based)
+                    typer.echo("\n💡 If you're using a RealMan robot (network-based), you can continue.")
+                    if not Confirm.ask("Continue with manual robot selection anyway?", default=False):
+                        typer.echo("\n🔌 Please connect your robot arm and try again.")
+                        typer.echo("   Run 'solo robo --scan' to check for connected motors.")
+                        return {}
+                
                 # Manual selection
                 typer.echo("\n🤖 Select your robot type:")
                 typer.echo("1. SO100 (single arm)")

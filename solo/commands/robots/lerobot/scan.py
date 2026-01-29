@@ -4,9 +4,30 @@ Scans all serial ports for connected Dynamixel and Feetech motors
 """
 
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from pathlib import Path
 from typing import Optional
 import typer
+
+
+# Default timeout for port scanning operations (seconds)
+PORT_SCAN_TIMEOUT = 5.0
+
+
+def run_with_timeout(func, timeout: float, default=None):
+    """
+    Run a function with a timeout. Returns default if timeout is exceeded.
+    Works on both Windows and Unix.
+    """
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(func)
+        try:
+            return future.result(timeout=timeout)
+        except FuturesTimeoutError:
+            return default
+        except Exception:
+            return default
 
 
 # Motor model number to name mapping
@@ -45,7 +66,21 @@ def get_serial_ports() -> list[str]:
         # Windows - use pyserial to find COM ports
         try:
             from serial.tools import list_ports
-            ports = [port.device for port in list_ports.comports()]
+            # Filter out Bluetooth serial ports (they hang during scanning)
+            # and prioritize USB ports (those with VID:PID)
+            usb_ports = []
+            other_ports = []
+            for port in list_ports.comports():
+                # Skip Bluetooth ports - they cause hangs
+                if "Bluetooth" in port.description:
+                    continue
+                # Prioritize USB ports (have VID/PID)
+                if port.vid is not None:
+                    usb_ports.append(port.device)
+                else:
+                    other_ports.append(port.device)
+            # Put USB ports first, they're most likely to have motors
+            ports = usb_ports + other_ports
         except ImportError:
             typer.echo("⚠️  pyserial required for Windows port detection")
     elif sys.platform == "darwin":
@@ -98,37 +133,51 @@ def get_serial_ports() -> list[str]:
     return sorted(ports)
 
 
-def scan_dynamixel_port(port: str, baudrate: int = 1_000_000) -> dict[int, int]:
+def scan_dynamixel_port(port: str, baudrate: int = 1_000_000, verbose: bool = False, timeout: float = PORT_SCAN_TIMEOUT) -> dict[int, int]:
     """Scan a port for Dynamixel motors. Returns {motor_id: model_number}."""
-    try:
-        import dynamixel_sdk as dxl
-    except ImportError:
-        return {}
     
-    found = {}
-    try:
-        port_handler = dxl.PortHandler(port)
-        packet_handler = dxl.PacketHandler(2.0)  # Protocol 2.0
-        
-        if not port_handler.openPort():
+    def _scan():
+        try:
+            import dynamixel_sdk as dxl
+        except ImportError:
+            if verbose:
+                typer.echo(f"   ⚠️  dynamixel_sdk not installed - run: pip install dynamixel-sdk")
             return {}
         
-        port_handler.setBaudRate(baudrate)
+        found = {}
+        try:
+            port_handler = dxl.PortHandler(port)
+            packet_handler = dxl.PacketHandler(2.0)  # Protocol 2.0
+            
+            if not port_handler.openPort():
+                if verbose:
+                    typer.echo(f"   ⚠️  Failed to open port {port} for Dynamixel scan (may be in use or access denied)")
+                return {}
+            
+            port_handler.setBaudRate(baudrate)
+            
+            # Scan motor IDs 1-20
+            for motor_id in range(1, 21):
+                model_number, result, _ = packet_handler.ping(port_handler, motor_id)
+                if result == dxl.COMM_SUCCESS:
+                    found[motor_id] = model_number
+            
+            port_handler.closePort()
+        except Exception as e:
+            if verbose:
+                typer.echo(f"   ⚠️  Dynamixel scan error on {port}: {e}")
         
-        # Scan motor IDs 1-20
-        for motor_id in range(1, 21):
-            model_number, result, _ = packet_handler.ping(port_handler, motor_id)
-            if result == dxl.COMM_SUCCESS:
-                found[motor_id] = model_number
-        
-        port_handler.closePort()
-    except Exception:
-        pass
+        return found
     
-    return found
+    result = run_with_timeout(_scan, timeout, default={})
+    if result is None:
+        if verbose:
+            typer.echo(f"   ⚠️  Dynamixel scan on {port} timed out after {timeout}s")
+        return {}
+    return result
 
 
-def scan_feetech_port(port: str, baudrate: int = 1_000_000, protocol: int = 0) -> dict[int, int]:
+def scan_feetech_port(port: str, baudrate: int = 1_000_000, protocol: int = 0, verbose: bool = False, timeout: float = PORT_SCAN_TIMEOUT) -> dict[int, int]:
     """
     Scan a port for Feetech motors. Returns {motor_id: model_number}.
     
@@ -136,50 +185,66 @@ def scan_feetech_port(port: str, baudrate: int = 1_000_000, protocol: int = 0) -
         port: Serial port path
         baudrate: Baud rate to use (default 1M)
         protocol: Feetech protocol version (0 for STS/SMS, 1 for SCS)
+        verbose: Print detailed error messages
+        timeout: Timeout in seconds for the scan operation
     """
-    try:
-        import scservo_sdk as scs
-    except ImportError:
-        return {}
     
-    found = {}
-    try:
-        port_handler = scs.PortHandler(port)
-        packet_handler = scs.PacketHandler(protocol)
-        
-        if not port_handler.openPort():
+    def _scan():
+        try:
+            import scservo_sdk as scs
+        except ImportError:
+            if verbose:
+                typer.echo(f"   ⚠️  scservo_sdk (feetech-servo-sdk) not installed - run: pip install feetech-servo-sdk")
             return {}
         
-        port_handler.setBaudRate(baudrate)
+        found = {}
+        try:
+            port_handler = scs.PortHandler(port)
+            packet_handler = scs.PacketHandler(protocol)
+            
+            if not port_handler.openPort():
+                if verbose:
+                    typer.echo(f"   ⚠️  Failed to open port {port} for Feetech scan (may be in use or access denied)")
+                return {}
+            
+            port_handler.setBaudRate(baudrate)
+            
+            if protocol == 0:
+                # Protocol 0 (STS/SMS) - use broadcast ping
+                # Simplified broadcast ping - scan individual IDs
+                for motor_id in range(1, 21):
+                    model_number, result, _ = packet_handler.ping(port_handler, motor_id)
+                    if result == scs.COMM_SUCCESS:
+                        # Read model number from register
+                        model_nb, _, _ = packet_handler.read2ByteTxRx(port_handler, motor_id, 3)  # Model_Number at addr 3
+                        if model_nb:
+                            found[motor_id] = model_nb
+                        else:
+                            found[motor_id] = model_number
+            else:
+                # Protocol 1 (SCS) - scan individual IDs
+                for motor_id in range(1, 21):
+                    model_number, result, _ = packet_handler.ping(port_handler, motor_id)
+                    if result == scs.COMM_SUCCESS:
+                        model_nb, _, _ = packet_handler.read2ByteTxRx(port_handler, motor_id, 3)
+                        if model_nb:
+                            found[motor_id] = model_nb
+                        else:
+                            found[motor_id] = model_number
+            
+            port_handler.closePort()
+        except Exception as e:
+            if verbose:
+                typer.echo(f"   ⚠️  Feetech scan error on {port}: {e}")
         
-        if protocol == 0:
-            # Protocol 0 (STS/SMS) - use broadcast ping
-            # Simplified broadcast ping - scan individual IDs
-            for motor_id in range(1, 21):
-                model_number, result, _ = packet_handler.ping(port_handler, motor_id)
-                if result == scs.COMM_SUCCESS:
-                    # Read model number from register
-                    model_nb, _, _ = packet_handler.read2ByteTxRx(port_handler, motor_id, 3)  # Model_Number at addr 3
-                    if model_nb:
-                        found[motor_id] = model_nb
-                    else:
-                        found[motor_id] = model_number
-        else:
-            # Protocol 1 (SCS) - scan individual IDs
-            for motor_id in range(1, 21):
-                model_number, result, _ = packet_handler.ping(port_handler, motor_id)
-                if result == scs.COMM_SUCCESS:
-                    model_nb, _, _ = packet_handler.read2ByteTxRx(port_handler, motor_id, 3)
-                    if model_nb:
-                        found[motor_id] = model_nb
-                    else:
-                        found[motor_id] = model_number
-        
-        port_handler.closePort()
-    except Exception:
-        pass
+        return found
     
-    return found
+    result = run_with_timeout(_scan, timeout, default={})
+    if result is None:
+        if verbose:
+            typer.echo(f"   ⚠️  Feetech scan on {port} timed out after {timeout}s")
+        return {}
+    return result
 
 
 def read_feetech_voltage(port: str, motor_id: int = 1, baudrate: int = 1_000_000, protocol: int = 0) -> Optional[float]:
@@ -484,13 +549,37 @@ def scan_motors():
     """Scan all serial ports for connected motors and display results."""
     typer.echo("🔍 Scanning for connected motors...\n")
     
+    # Check SDK availability first
+    sdk_status = []
+    try:
+        import dynamixel_sdk
+        sdk_status.append("✅ dynamixel_sdk installed")
+    except ImportError:
+        sdk_status.append("❌ dynamixel_sdk NOT installed (run: pip install dynamixel-sdk)")
+    
+    try:
+        import scservo_sdk
+        sdk_status.append("✅ scservo_sdk installed")
+    except ImportError:
+        sdk_status.append("❌ scservo_sdk NOT installed (run: pip install feetech-servo-sdk)")
+    
+    typer.echo("📦 SDK Status:")
+    for status in sdk_status:
+        typer.echo(f"   {status}")
+    typer.echo("")
+    
     ports = get_serial_ports()
     
     if not ports:
         typer.echo("❌ No serial ports found.")
         typer.echo("\n💡 Tips:")
         typer.echo("   • Make sure your robot arm is connected via USB")
-        typer.echo("   • Run 'solo setup-usb' to configure USB permissions")
+        if sys.platform == "win32":
+            typer.echo("   • Check Device Manager for COM ports")
+            typer.echo("   • Make sure the correct drivers are installed")
+            typer.echo("   • Try a different USB port or cable")
+        else:
+            typer.echo("   • Run 'solo setup-usb' to configure USB permissions")
         return
     
     typer.echo(f"📡 Found {len(ports)} serial port(s):\n")
@@ -502,7 +591,7 @@ def scan_motors():
         typer.echo(f"━━━ {port} ━━━")
         
         # Try Dynamixel first (Koch arms)
-        dynamixel_motors = scan_dynamixel_port(port)
+        dynamixel_motors = scan_dynamixel_port(port, verbose=True)
         
         if dynamixel_motors:
             found_any = True
@@ -520,7 +609,7 @@ def scan_motors():
                 typer.echo("    → Likely: Koch Follower arm")
         else:
             # Try Feetech Protocol 0 (STS/SMS - SO100/SO101)
-            feetech_motors = scan_feetech_port(port, protocol=0)
+            feetech_motors = scan_feetech_port(port, protocol=0, verbose=True)
             
             if feetech_motors:
                 found_any = True
@@ -545,7 +634,7 @@ def scan_motors():
                         typer.echo("    → Likely: SO100/SO101 arm")
             else:
                 # Try Feetech Protocol 1 (SCS series)
-                feetech_motors_p1 = scan_feetech_port(port, protocol=1)
+                feetech_motors_p1 = scan_feetech_port(port, protocol=1, verbose=True)
                 
                 if feetech_motors_p1:
                     found_any = True
@@ -566,7 +655,15 @@ def scan_motors():
         typer.echo("      • Dynamixel/Koch: 12V power supply")
         typer.echo("      • Feetech/SO100/SO101: 7.4V or 12V depending on model")
         typer.echo("   2. Check that motor cables are firmly connected")
-        typer.echo("   3. Run 'solo setup-usb' if you have permission issues")
+        if sys.platform == "win32":
+            typer.echo("   3. Windows-specific checks:")
+            typer.echo("      • Open Device Manager → Ports (COM & LPT)")
+            typer.echo("      • Check if COM port shows without errors")
+            typer.echo("      • Try running terminal/cmd as Administrator")
+            typer.echo("      • Close any other apps using the COM port (Arduino IDE, etc.)")
+            typer.echo("      • Install CH340/FTDI drivers if needed")
+        else:
+            typer.echo("   3. Run 'solo setup-usb' if you have permission issues")
         typer.echo("   4. Try unplugging and replugging the USB cable")
     else:
         if detected_robot_type:

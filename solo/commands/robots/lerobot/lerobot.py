@@ -11,8 +11,16 @@ console = Console()
 
 def handle_lerobot(config: dict, calibrate: str, motors: str, teleop: bool, record: bool, train: bool, inference: bool = False, replay: bool = False, auto_use: bool = False, replay_options: dict = None):
     """Handle LeRobot framework operations"""
-    # Check LeRobot installation
-    import lerobot
+    # Only import lerobot for operations that actually need it (training, inference, etc.)
+    # Motor setup and calibration don't need the full lerobot library
+    needs_lerobot = train or record or inference or replay or teleop
+    
+    if needs_lerobot:
+        try:
+            import lerobot  # Heavy import - only when needed
+        except ImportError:
+            typer.echo("❌ LeRobot is not installed. Run: pip install lerobot")
+            return
     
     if train:
         # Training mode - train a policy on recorded data
