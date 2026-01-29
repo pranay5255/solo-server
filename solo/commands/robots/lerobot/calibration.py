@@ -336,7 +336,6 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
         robot_type = existing_robot_type
     else:
         # Try auto-detection first
-        typer.echo("\n🔍 Auto-detecting robot type...")
         try:
             from solo.commands.robots.lerobot.scan import auto_detect_robot_type
             detected_type, port_info = auto_detect_robot_type(verbose=True)

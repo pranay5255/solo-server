@@ -4,6 +4,7 @@ Scans all serial ports for connected Dynamixel and Feetech motors
 """
 
 import sys
+import glob
 import threading
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from pathlib import Path
@@ -85,25 +86,34 @@ def get_serial_ports() -> list[str]:
             typer.echo("⚠️  pyserial required for Windows port detection")
     elif sys.platform == "darwin":
         # macOS - USB serial devices appear as tty.usbmodem* or cu.usbmodem*
-        dev = Path("/dev")
+        # Use glob.glob() instead of Path.glob() for better compatibility with /dev/ on macOS
         patterns = [
-            "tty.usbmodem*",    # USB CDC ACM devices (robot arms)
-            "cu.usbmodem*",     # Call-out version of usbmodem
-            "tty.usbserial*",   # USB-to-serial adapters
-            "cu.usbserial*",    # Call-out version of usbserial
-            "tty.SLAB*",        # Silicon Labs USB-UART bridges
-            "cu.SLAB*",         # Call-out version
-            "tty.wchusbserial*", # WCH USB-UART bridges (common on some arms)
-            "cu.wchusbserial*",
+            "/dev/tty.usbmodem*",    # USB CDC ACM devices (robot arms)
+            "/dev/cu.usbmodem*",     # Call-out version of usbmodem
+            "/dev/tty.usbserial*",   # USB-to-serial adapters
+            "/dev/cu.usbserial*",    # Call-out version of usbserial
+            "/dev/tty.SLAB*",        # Silicon Labs USB-UART bridges
+            "/dev/cu.SLAB*",         # Call-out version
+            "/dev/tty.wchusbserial*", # WCH USB-UART bridges (common on some arms)
+            "/dev/cu.wchusbserial*",
         ]
         for pattern in patterns:
-            ports.extend(str(p) for p in dev.glob(pattern))
+            ports.extend(glob.glob(pattern))
         
         # Prefer tty.* over cu.* (tty handles hardware flow control better)
         # Filter out duplicates, keeping tty.* versions
+        # Sort with tty.* before cu.* so tty.* gets processed first
+        def sort_key(port):
+            # tty.* should come before cu.* (return 0 for tty, 1 for cu)
+            if "/tty." in port:
+                return (0, port)
+            elif "/cu." in port:
+                return (1, port)
+            return (2, port)
+        
         seen_devices = set()
         filtered_ports = []
-        for port in sorted(ports):
+        for port in sorted(ports, key=sort_key):
             # Extract the unique identifier (everything after tty. or cu.)
             if ".usbmodem" in port or ".usbserial" in port or ".SLAB" in port or ".wchusbserial" in port:
                 device_id = port.split(".")[-1]
@@ -122,13 +132,12 @@ def get_serial_ports() -> list[str]:
         ports = filtered_ports
     else:
         # Linux
-        dev = Path("/dev")
         patterns = [
-            "ttyACM*",   # USB CDC ACM devices (most common for robot arms)
-            "ttyUSB*",   # USB-to-serial adapters (FTDI, CH340, etc.)
+            "/dev/ttyACM*",   # USB CDC ACM devices (most common for robot arms)
+            "/dev/ttyUSB*",   # USB-to-serial adapters (FTDI, CH340, etc.)
         ]
         for pattern in patterns:
-            ports.extend(str(p) for p in dev.glob(pattern))
+            ports.extend(glob.glob(pattern))
     
     return sorted(ports)
 

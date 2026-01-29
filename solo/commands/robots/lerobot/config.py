@@ -203,14 +203,15 @@ def format_id_with_robot_type(arm_id: str, detected_robot_type: Optional[str] = 
 
 
 def display_known_ids(known_ids: List[str], arm_type: str, detected_robot_type: Optional[str] = None, config: Optional[dict] = None) -> None:
-    """Display known IDs organized by robot type.
+    """Display known IDs filtered by robot type.
     
-    Shows IDs for the detected robot type first (if any), then IDs for other robot types.
+    Only shows IDs that match the detected/selected robot type.
+    IDs from other robot types are hidden to avoid confusion.
     
     Args:
         known_ids: List of known arm IDs (for backward compatibility, can be empty if using config)
         arm_type: "leader" or "follower"
-        detected_robot_type: Currently detected robot type from hardware scan
+        detected_robot_type: Currently detected/selected robot type
         config: Config dictionary to get IDs organized by type (preferred)
     """
     import typer
@@ -228,46 +229,39 @@ def display_known_ids(known_ids: List[str], arm_type: str, detected_robot_type: 
         ids_by_type = get_known_ids_by_type(config)
         key = 'leaders' if arm_type == 'leader' else 'followers'
         
-        # Collect all IDs with their robot types, prioritizing detected type
-        all_ids_with_types = []
+        # Only show IDs that match the detected robot type
+        matching_ids = []
         
-        # First add IDs from detected robot type
         if detected_robot_type and detected_robot_type in ids_by_type:
+            # Get IDs for the detected robot type
             for arm_id in ids_by_type[detected_robot_type].get(key, []):
-                all_ids_with_types.append((arm_id, detected_robot_type, True))
+                matching_ids.append(arm_id)
         
-        # Then add IDs from other robot types
-        for rtype, type_ids in ids_by_type.items():
-            if rtype != detected_robot_type:
-                for arm_id in type_ids.get(key, []):
-                    # Check if already added
-                    if not any(aid == arm_id for aid, _, _ in all_ids_with_types):
-                        all_ids_with_types.append((arm_id, rtype, False))
+        # Also include IDs marked as 'unknown' type (legacy IDs without type info)
+        if 'unknown' in ids_by_type:
+            for arm_id in ids_by_type['unknown'].get(key, []):
+                if arm_id not in matching_ids:
+                    matching_ids.append(arm_id)
         
-        if all_ids_with_types:
-            if detected_robot_type:
-                typer.echo(f"📇 Known {arm_type} ids (detected: {detected_robot_type}):")
-            else:
-                typer.echo(f"📇 Known {arm_type} ids:")
-            
-            for i, (arm_id, rtype, is_detected) in enumerate(all_ids_with_types, 1):
-                if rtype == 'unknown':
-                    typer.echo(f"   {i}. {arm_id}")
-                elif is_detected:
-                    typer.echo(f"   {i}. {arm_id} ({rtype}) ✓")
-                else:
-                    typer.echo(f"   {i}. {arm_id} ({rtype})")
+        if matching_ids:
+            typer.echo(f"📇 Known {arm_type} ids for {detected_robot_type.upper() if detected_robot_type else 'unknown'}:")
+            for i, arm_id in enumerate(matching_ids, 1):
+                typer.echo(f"   {i}. {arm_id}")
         return
     
-    # Fallback to old behavior with flat list
+    # Fallback to old behavior with flat list - filter by inferred type
     if known_ids:
-        if detected_robot_type:
-            typer.echo(f"📇 Known {arm_type} ids (detected: {detected_robot_type}):")
-        else:
-            typer.echo(f"📇 Known {arm_type} ids:")
-        for i, kid in enumerate(known_ids, 1):
-            formatted = format_id_with_robot_type(kid, detected_robot_type)
-            typer.echo(f"   {i}. {formatted}")
+        filtered_ids = []
+        for kid in known_ids:
+            inferred_type = infer_robot_type_from_id(kid)
+            # Include if type matches, or if no type could be inferred (legacy ID)
+            if inferred_type is None or inferred_type == detected_robot_type:
+                filtered_ids.append(kid)
+        
+        if filtered_ids:
+            typer.echo(f"📇 Known {arm_type} ids for {detected_robot_type.upper() if detected_robot_type else 'unknown'}:")
+            for i, kid in enumerate(filtered_ids, 1):
+                typer.echo(f"   {i}. {kid}")
 
 
 def add_known_id(config: dict, arm_type: str, arm_id: str, robot_type: Optional[str] = None) -> None:

@@ -142,7 +142,6 @@ def inference_mode(config: dict, auto_use: bool = False):
         
         if not robot_type:
             # Try auto-detection first
-            typer.echo("\n🔍 Auto-detecting robot type...")
             try:
                 from solo.commands.robots.lerobot.scan import auto_detect_robot_type
                 detected_type, port_info = auto_detect_robot_type(verbose=True)

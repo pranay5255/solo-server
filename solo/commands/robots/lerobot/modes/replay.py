@@ -61,7 +61,6 @@ def replay_mode(config: dict, auto_use: bool = False, replay_options: dict = Non
         
             if not robot_type:
                 # Try auto-detection first
-                typer.echo("\n🔍 Auto-detecting robot type...")
                 try:
                     from solo.commands.robots.lerobot.scan import auto_detect_robot_type
                     detected_type, port_info = auto_detect_robot_type(verbose=True)

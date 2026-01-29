@@ -235,7 +235,9 @@ def detect_bimanual_arm_ports(arm_type: str) -> tuple[Optional[str], Optional[st
 
 def detect_and_retry_ports(leader_port: str, follower_port: str, config: dict = None) -> tuple[str, str]:
     """
-    Detect new ports if connection fails and update config
+    Detect new ports if connection fails and update config.
+    Also updates all preconfigured mode settings (teleop, recording, inference, replay).
+    
     Returns (new_leader_port, new_follower_port)
     """
     typer.echo("🔍 Detecting new ports...")
@@ -252,10 +254,16 @@ def detect_and_retry_ports(leader_port: str, follower_port: str, config: dict = 
         # Update config with new ports if provided
         if config:
             from solo.commands.robots.lerobot.config import save_lerobot_config
+            from solo.commands.robots.lerobot.mode_config import update_all_mode_config_ports
+            
+            # Update general config
             save_lerobot_config(config, {
                 'leader_port': new_leader_port,
                 'follower_port': new_follower_port
             })
+            
+            # Also update all preconfigured mode settings
+            update_all_mode_config_ports(config, new_leader_port, new_follower_port)
         
         return new_leader_port, new_follower_port
     else:

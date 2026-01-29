@@ -203,3 +203,54 @@ def save_replay_config(config: dict, replay_args: Dict) -> None:
         'play_sounds': replay_args.get('play_sounds')
     }
     save_mode_config(config, 'replay', replay_config)
+
+
+def update_all_mode_config_ports(config: dict, leader_port: Optional[str] = None, follower_port: Optional[str] = None) -> None:
+    """
+    Update ports in all mode-specific configurations.
+    
+    This is called when auto-detection finds new ports after a connection failure.
+    Updates teleop, recording, inference, and replay configs with the new ports.
+    
+    Args:
+        config: Main configuration dictionary
+        leader_port: New leader port (if None, won't update leader ports)
+        follower_port: New follower port (if None, won't update follower ports)
+    """
+    if 'lerobot' not in config or 'mode_configs' not in config['lerobot']:
+        return
+    
+    mode_configs = config['lerobot']['mode_configs']
+    updated_modes = []
+    
+    # Modes that have leader_port
+    leader_modes = ['teleop', 'recording', 'inference']
+    # Modes that have follower_port
+    follower_modes = ['teleop', 'recording', 'inference', 'replay']
+    
+    for mode, mode_config in mode_configs.items():
+        if not isinstance(mode_config, dict):
+            continue
+        
+        updated = False
+        
+        # Update leader_port if applicable
+        if leader_port and mode in leader_modes and 'leader_port' in mode_config:
+            mode_config['leader_port'] = leader_port
+            updated = True
+        
+        # Update follower_port if applicable
+        if follower_port and mode in follower_modes and 'follower_port' in mode_config:
+            mode_config['follower_port'] = follower_port
+            updated = True
+        
+        if updated:
+            updated_modes.append(mode)
+    
+    if updated_modes:
+        # Save to file
+        os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
+        with open(CONFIG_PATH, 'w') as f:
+            json.dump(config, f, indent=4)
+        
+        typer.echo(f"📝 Updated ports in preconfigured settings: {', '.join(updated_modes)}")
