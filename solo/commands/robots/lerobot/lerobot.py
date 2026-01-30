@@ -19,7 +19,7 @@ def handle_lerobot(config: dict, calibrate: str, motors: str, teleop: bool, reco
         try:
             import lerobot  # Heavy import - only when needed
         except ImportError:
-            typer.echo("❌ LeRobot is not installed. Run: pip install lerobot")
+            typer.echo("❌ LeRobot is not installed.")
             return
     
     if train:
@@ -129,24 +129,9 @@ def motor_setup_mode(config: dict, arm_type: str = None):
     if reuse_all and existing_robot_type:
         robot_type = existing_robot_type
     else:
-        # Ask for robot type
-        typer.echo("\n🤖 Select your robot type:")
-        typer.echo("1. SO100 (single arm)")
-        typer.echo("2. SO101 (single arm)")
-        typer.echo("3. Koch (single arm)")
-        typer.echo("4. RealMan R1D2 (follower with SO101 leader)")
-        typer.echo("5. Bimanual SO100")
-        typer.echo("6. Bimanual SO101")
-        robot_choice = int(Prompt.ask("Enter robot type", default="1"))
-        robot_type_map = {
-            1: "so100",
-            2: "so101",
-            3: "koch",
-            4: "realman_r1d2",
-            5: "bi_so100",
-            6: "bi_so101"
-        }
-        robot_type = robot_type_map.get(robot_choice, "so100")
+        # Manual selection of robot type
+        from solo.commands.robots.lerobot.utils.helper import prompt_robot_type_selection
+        robot_type = prompt_robot_type_selection(default="so101")
     
     motor_config = {'robot_type': robot_type}
     is_bimanual = is_bimanual_robot(robot_type)

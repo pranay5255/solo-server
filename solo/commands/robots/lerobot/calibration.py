@@ -23,23 +23,13 @@ from solo.commands.robots.lerobot.config import (
 )
 from solo.commands.robots.lerobot.realman_config import load_realman_config, prompt_realman_config, test_realman_connection
 
-# Heavy lerobot imports are done lazily inside functions:
-# - from lerobot.scripts.lerobot_calibrate import calibrate, CalibrateConfig
-# - from lerobot.teleoperators import make_teleoperator_from_config
-# - from lerobot.robots import make_robot_from_config
-# - from lerobot.robots.realman_follower import RealManFollowerConfig
-
 def calibrate_arm(arm_type: str, port: str, robot_type: str = "so100", arm_id: Optional[str] = None) -> bool:
     """
     Calibrate a specific arm using the lerobot calibration system
     """
-    # Lazy import heavy lerobot modules
-    typer.echo("\n⏳ Loading LeRobot modules...")
     from lerobot.scripts.lerobot_calibrate import calibrate, CalibrateConfig
-    typer.echo("✅ LeRobot modules loaded.\n")
     
     typer.echo(f"🔧 Calibrating {arm_type} arm on port {port}...")
-    
     try:
         # Determine the appropriate config class based on arm type and robot type
         leader_config_class, follower_config_class = get_robot_config_classes(robot_type)
@@ -79,11 +69,9 @@ def calibrate_realman_follower(realman_cfg: Dict, follower_id: str) -> bool:
     Returns:
         True if calibration succeeded, False otherwise
     """
-    # Lazy import heavy lerobot modules
-    typer.echo("\n⏳ Loading LeRobot modules...")
+   
     from lerobot.robots import make_robot_from_config
     from lerobot.robots.realman_follower import RealManFollowerConfig
-    typer.echo("✅ LeRobot modules loaded.\n")
     
     try:
         # Create RealManFollowerConfig
@@ -130,10 +118,8 @@ def calibrate_bimanual_arm(
     """
     Calibrate a bimanual arm (both left and right) using the lerobot calibration system
     """
-    # Lazy import heavy lerobot modules
-    typer.echo("\n⏳ Loading LeRobot modules...")
+
     from lerobot.scripts.lerobot_calibrate import calibrate, CalibrateConfig
-    typer.echo("✅ LeRobot modules loaded.\n")
     
     typer.echo(f"🔧 Calibrating bimanual {arm_type} arms...")
     typer.echo(f"   • Left arm port: {left_port}")
@@ -184,11 +170,9 @@ def setup_motors_for_arm(arm_type: str, port: str, robot_type: str = "so100") ->
     Setup motor IDs for a specific arm (leader or follower)
     Returns True if successful, False otherwise
     """
-    # Lazy import heavy lerobot modules
-    typer.echo("\n⏳ Loading LeRobot modules...")
+    
     from lerobot.teleoperators import make_teleoperator_from_config
     from lerobot.robots import make_robot_from_config
-    typer.echo("✅ LeRobot modules loaded.\n")
 
     try:
         # Determine the appropriate config class based on arm type and robot type
@@ -233,11 +217,9 @@ def setup_motors_for_bimanual_arm(
     Setup motor IDs for bimanual arm (both left and right)
     Returns True if successful, False otherwise
     """
-    # Lazy import heavy lerobot modules
-    typer.echo("\n⏳ Loading LeRobot modules...")
+    
     from lerobot.teleoperators import make_teleoperator_from_config
     from lerobot.robots import make_robot_from_config
-    typer.echo("✅ LeRobot modules loaded.\n")
     
     typer.echo(f"🔧 Setting up motors for bimanual {arm_type} arms...")
     typer.echo(f"   • Left arm port: {left_port}")
@@ -367,43 +349,13 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
                         return {}
                 
                 # Manual selection
-                typer.echo("\n🤖 Select your robot type:")
-                typer.echo("1. SO100 (single arm)")
-                typer.echo("2. SO101 (single arm)")
-                typer.echo("3. Koch (single arm)")
-                typer.echo("4. Bimanual SO100")
-                typer.echo("5. Bimanual SO101")
-                typer.echo("6. RealMan R1D2 (follower with SO101 leader)")
-                robot_choice = int(Prompt.ask("Enter robot type", default="2"))
-                robot_type_map = {
-                    1: "so100",
-                    2: "so101",
-                    3: "koch",
-                    4: "bi_so100",
-                    5: "bi_so101",
-                    6: "realman_r1d2"
-                }
-                robot_type = robot_type_map.get(robot_choice, "so101")
+                from solo.commands.robots.lerobot.utils.helper import prompt_robot_type_selection
+                robot_type = prompt_robot_type_selection(default="so101")
         except Exception as e:
             typer.echo(f"⚠️  Auto-detection failed: {e}")
             # Fall back to manual selection
-            typer.echo("\n🤖 Select your robot type:")
-            typer.echo("1. SO100 (single arm)")
-            typer.echo("2. SO101 (single arm)")
-            typer.echo("3. Koch (single arm)")
-            typer.echo("4. Bimanual SO100")
-            typer.echo("5. Bimanual SO101")
-            typer.echo("6. RealMan R1D2 (follower with SO101 leader)")
-            robot_choice = int(Prompt.ask("Enter robot type", default="2"))
-            robot_type_map = {
-                1: "so100",
-                2: "so101",
-                3: "koch",
-                4: "bi_so100",
-                5: "bi_so101",
-                6: "realman_r1d2"
-            }
-            robot_type = robot_type_map.get(robot_choice, "so101")
+            from solo.commands.robots.lerobot.utils.helper import prompt_robot_type_selection
+            robot_type = prompt_robot_type_selection(default="so101")
     
     config['robot_type'] = robot_type
     is_bimanual = is_bimanual_robot(robot_type)
@@ -444,11 +396,8 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
                 typer.echo("❌ Failed to detect SO101 leader arm. Skipping leader calibration.")
             else:
                 config['leader_port'] = leader_port
-                known_leader_ids, _ = get_known_ids(main_config or {}, robot_type="so101")
-                default_leader_id = (main_config or {}).get('lerobot', {}).get('leader_id') or "so101_leader"
-                from solo.commands.robots.lerobot.config import display_known_ids
-                display_known_ids(known_leader_ids, "leader", detected_robot_type="so101", config=main_config or {})
-                leader_id = Prompt.ask("Enter leader id", default=default_leader_id)
+                from solo.commands.robots.lerobot.utils.helper import prompt_arm_id
+                leader_id = prompt_arm_id(main_config or {}, "leader", "so101")
                 
                 # Calibrate SO101 leader
                 if calibrate_arm("leader", leader_port, "so101", leader_id):
@@ -481,11 +430,8 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
                 config['realman_config'] = realman_cfg  # Also store at top level for easy access
                 
                 # Set follower ID
-                _, known_follower_ids = get_known_ids(main_config or {}, robot_type=robot_type)
-                default_follower_id = (main_config or {}).get('lerobot', {}).get('follower_id') or "realman_r1d2_follower"
-                from solo.commands.robots.lerobot.config import display_known_ids
-                display_known_ids(known_follower_ids, "follower", detected_robot_type=robot_type, config=main_config or {})
-                follower_id = Prompt.ask("Enter follower id", default=default_follower_id)
+                from solo.commands.robots.lerobot.utils.helper import prompt_arm_id
+                follower_id = prompt_arm_id(main_config or {}, "follower", robot_type)
                 config['follower_id'] = follower_id
                 
                 # Add known ID - ensure we have proper main_config
@@ -528,11 +474,8 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
                 config['right_leader_port'] = right_leader_port
                 
                 # Select leader id
-                known_leader_ids, _ = get_known_ids(main_config or {}, robot_type=robot_type)
-                default_leader_id = (main_config or {}).get('lerobot', {}).get('leader_id') or f"{robot_type}_leader"
-                from solo.commands.robots.lerobot.config import display_known_ids
-                display_known_ids(known_leader_ids, "leader", detected_robot_type=robot_type, config=main_config or {})
-                leader_id = Prompt.ask("Enter leader id", default=default_leader_id)
+                from solo.commands.robots.lerobot.utils.helper import prompt_arm_id
+                leader_id = prompt_arm_id(main_config or {}, "leader", robot_type)
                 
                 # Calibrate bimanual leader arms
                 if calibrate_bimanual_arm("leader", left_leader_port, right_leader_port, robot_type, leader_id):
@@ -558,11 +501,8 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
                 config['right_follower_port'] = right_follower_port
                 
                 # Select follower id
-                _, known_follower_ids = get_known_ids(main_config or {}, robot_type=robot_type)
-                default_follower_id = (main_config or {}).get('lerobot', {}).get('follower_id') or f"{robot_type}_follower"
-                from solo.commands.robots.lerobot.config import display_known_ids
-                display_known_ids(known_follower_ids, "follower", detected_robot_type=robot_type, config=main_config or {})
-                follower_id = Prompt.ask("Enter follower id", default=default_follower_id)
+                from solo.commands.robots.lerobot.utils.helper import prompt_arm_id
+                follower_id = prompt_arm_id(main_config or {}, "follower", robot_type)
                 
                 # Calibrate bimanual follower arms
                 if calibrate_bimanual_arm("follower", left_follower_port, right_follower_port, robot_type, follower_id):
@@ -590,11 +530,8 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
             else:
                 config['leader_port'] = leader_port
                 # Select leader id
-                known_leader_ids, _ = get_known_ids(main_config or {}, robot_type=robot_type)
-                default_leader_id = (main_config or {}).get('lerobot', {}).get('leader_id') or f"{robot_type}_leader"
-                from solo.commands.robots.lerobot.config import display_known_ids
-                display_known_ids(known_leader_ids, "leader", detected_robot_type=robot_type, config=main_config or {})
-                leader_id = Prompt.ask("Enter leader id", default=default_leader_id)
+                from solo.commands.robots.lerobot.utils.helper import prompt_arm_id
+                leader_id = prompt_arm_id(main_config or {}, "leader", robot_type)
                 
                 # Calibrate leader arm
                 if calibrate_arm("leader", leader_port, robot_type, leader_id):
@@ -620,11 +557,8 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
             else:
                 config['follower_port'] = follower_port
                 # Select follower id
-                _, known_follower_ids = get_known_ids(main_config or {}, robot_type=robot_type)
-                default_follower_id = (main_config or {}).get('lerobot', {}).get('follower_id') or f"{robot_type}_follower"
-                from solo.commands.robots.lerobot.config import display_known_ids
-                display_known_ids(known_follower_ids, "follower", detected_robot_type=robot_type, config=main_config or {})
-                follower_id = Prompt.ask("Enter follower id", default=default_follower_id)
+                from solo.commands.robots.lerobot.utils.helper import prompt_arm_id
+                follower_id = prompt_arm_id(main_config or {}, "follower", robot_type)
                 
                 # Calibrate follower arm
                 if calibrate_arm("follower", follower_port, robot_type, follower_id):

@@ -6,6 +6,7 @@ import json
 import os
 import typer
 from typing import Optional, Tuple, TYPE_CHECKING, Dict, List
+from rich.prompt import Prompt
 from solo.config import CONFIG_PATH
 
 if TYPE_CHECKING:

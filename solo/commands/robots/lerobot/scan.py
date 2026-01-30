@@ -150,7 +150,7 @@ def scan_dynamixel_port(port: str, baudrate: int = 1_000_000, verbose: bool = Fa
             import dynamixel_sdk as dxl
         except ImportError:
             if verbose:
-                typer.echo(f"   ⚠️  dynamixel_sdk not installed - run: pip install dynamixel-sdk")
+                typer.echo(f"   ⚠️  dynamixel_sdk not installed ")
             return {}
         
         found = {}
@@ -203,7 +203,7 @@ def scan_feetech_port(port: str, baudrate: int = 1_000_000, protocol: int = 0, v
             import scservo_sdk as scs
         except ImportError:
             if verbose:
-                typer.echo(f"   ⚠️  scservo_sdk (feetech-servo-sdk) not installed - run: pip install feetech-servo-sdk")
+                typer.echo(f"   ⚠️  scservo_sdk (feetech-servo-sdk) not installed")
             return {}
         
         found = {}
@@ -564,13 +564,13 @@ def scan_motors():
         import dynamixel_sdk
         sdk_status.append("✅ dynamixel_sdk installed")
     except ImportError:
-        sdk_status.append("❌ dynamixel_sdk NOT installed (run: pip install dynamixel-sdk)")
+        sdk_status.append("❌ dynamixel_sdk NOT installed")
     
     try:
         import scservo_sdk
         sdk_status.append("✅ scservo_sdk installed")
     except ImportError:
-        sdk_status.append("❌ scservo_sdk NOT installed (run: pip install feetech-servo-sdk)")
+        sdk_status.append("❌ scservo_sdk NOT installed")
     
     typer.echo("📦 SDK Status:")
     for status in sdk_status:

@@ -10,12 +10,11 @@ from rich.prompt import Prompt, Confirm
 
 from solo.commands.robots.lerobot.config import (
     validate_lerobot_config,
-    get_known_ids,
 )
 from solo.commands.robots.lerobot.auth import authenticate_huggingface
 from solo.commands.robots.lerobot.cameras import setup_cameras
 from solo.commands.robots.lerobot.mode_config import use_preconfigured_args
-from solo.commands.robots.lerobot.ports import detect_arm_port, detect_and_retry_ports
+from solo.commands.robots.lerobot.ports import detect_and_retry_ports
 from solo.commands.robots.lerobot.utils.record_config import unified_record_config
 
 
@@ -141,72 +140,16 @@ def inference_mode(config: dict, auto_use: bool = False):
         robot_type = detected_robot_type if detected_robot_type else saved_robot_type
         
         if not robot_type:
-            # Try auto-detection first
-            try:
-                from solo.commands.robots.lerobot.scan import auto_detect_robot_type
-                detected_type, port_info = auto_detect_robot_type(verbose=True)
-                
-                if detected_type:
-                    typer.echo(f"\n🤖 Auto-detected robot type: {detected_type.upper()}")
-                    use_detected = Confirm.ask("Use this robot type?", default=True)
-                    if use_detected:
-                        robot_type = detected_type
-                    else:
-                        detected_type = None
-                
-                if not detected_type:
-                    typer.echo("\n🤖 Select your robot type:")
-                    typer.echo("1. SO100 (single arm)")
-                    typer.echo("2. SO101 (single arm)")
-                    typer.echo("3. Koch (single arm)")
-                    typer.echo("4. RealMan R1D2 (follower with SO101 leader)")
-                    typer.echo("5. Bimanual SO100")
-                    typer.echo("6. Bimanual SO101")
-                    robot_choice = int(Prompt.ask("Enter robot type", default="2"))
-                    robot_type_map = {
-                        1: "so100",
-                        2: "so101",
-                        3: "koch",
-                        4: "realman_r1d2",
-                        5: "bi_so100",
-                        6: "bi_so101"
-                    }
-                    robot_type = robot_type_map.get(robot_choice, "so101")
-            except Exception as e:
-                typer.echo(f"⚠️  Auto-detection failed: {e}")
-                typer.echo("\n🤖 Select your robot type:")
-                typer.echo("1. SO100 (single arm)")
-                typer.echo("2. SO101 (single arm)")
-                typer.echo("3. Koch (single arm)")
-                typer.echo("4. RealMan R1D2 (follower with SO101 leader)")
-                typer.echo("5. Bimanual SO100")
-                typer.echo("6. Bimanual SO101")
-                robot_choice = int(Prompt.ask("Enter robot type", default="2"))
-                robot_type_map = {
-                    1: "so100",
-                    2: "so101",
-                    3: "koch",
-                    4: "realman_r1d2",
-                    5: "bi_so100",
-                    6: "bi_so101"
-                }
-                robot_type = robot_type_map.get(robot_choice, "so101")
-            
+            from solo.commands.robots.lerobot.utils.helper import auto_detect_robot
+            robot_type = auto_detect_robot(default="so101")
             config['robot_type'] = robot_type
         
         # Handle port/connection based on robot type
         from solo.commands.robots.lerobot.config import is_realman_robot
+        from solo.commands.robots.lerobot.utils.helper import get_realman_configs, port_detection, prompt_arm_id
         if is_realman_robot(robot_type):
             # RealMan: Load network config
-            from solo.commands.robots.lerobot.realman_config import load_realman_config
-            lerobot_config = config.get('lerobot', {})
-            # Always load fresh config from YAML to pick up changes (like invert_joints)
-            realman_config = load_realman_config()
-            # Merge with any saved network settings (ip/port) if they exist
-            saved_realman = lerobot_config.get('realman_config', {})
-            if saved_realman:
-                realman_config['ip'] = saved_realman.get('ip', realman_config['ip'])
-                realman_config['port'] = saved_realman.get('port', realman_config['port'])
+            realman_config = get_realman_configs(config)
             config['realman_config'] = realman_config
             follower_port = None  # Network-based, no USB port
             
@@ -214,9 +157,7 @@ def inference_mode(config: dict, auto_use: bool = False):
             typer.echo(f"   • Robot type: {robot_type.upper()}")
             typer.echo(f"   • Follower: {realman_config.get('ip')}:{realman_config.get('port')}")
         else:
-            if not follower_port:
-                follower_port, _ = detect_arm_port("follower", robot_type=robot_type)
-                config['follower_port'] = follower_port
+            follower_port = port_detection(config, "follower", robot_type, follower_port)
             
             typer.echo("✅ Found calibrated follower arm:")
             typer.echo(f"   • Robot type: {robot_type.upper()}")
@@ -224,19 +165,13 @@ def inference_mode(config: dict, auto_use: bool = False):
         
         # Check if leader arm is available for teleoperation
         use_teleoperation = False
-        known_leader_ids, known_follower_ids = get_known_ids(config, robot_type=robot_type)
-        from solo.commands.robots.lerobot.config import display_known_ids
         if leader_port and leader_calibrated:
             use_teleoperation = Confirm.ask("Would you like to teleoperate during inference?", default=False)
             if use_teleoperation:
-                default_leader_id = config.get('lerobot', {}).get('leader_id') or f"{robot_type}_leader"
-                display_known_ids(known_leader_ids, "leader", detected_robot_type=robot_type, config=config)
-                leader_id = Prompt.ask("Enter leader id", default=default_leader_id)
+                leader_id = prompt_arm_id(config, "leader", robot_type)
                 typer.echo("🎮 Teleoperation enabled - you can override the policy using the leader arm")
 
-        default_follower_id = config.get('lerobot', {}).get('follower_id') or f"{robot_type}_follower"
-        display_known_ids(known_follower_ids, "follower", detected_robot_type=robot_type, config=config)
-        follower_id = Prompt.ask("Enter follower id", default=default_follower_id)
+        follower_id = prompt_arm_id(config, "follower", robot_type)
         
         # Step 1: Get policy path first to determine if HuggingFace auth is needed
         typer.echo("\n🤖 Step 1: Policy Configuration")
