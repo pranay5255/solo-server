@@ -58,71 +58,23 @@ explained in [prereq.md](prereq.md)
 ```bash
 
 #Choose one of the following for solo-cli installation
-#1. Install solo cli from PyPI python manager
-uv pip install solo-cli
-
-#2. Install solo cli from source
+#1. Install solo cli from source (Strongly Recommended for Hackathons)
 git clone https://github.com/GetSoloTech/solo-cli.git
 cd solo-cli
 uv pip install -e .
 
-# Solo commands
-solo --help
-
+#2. Install solo cli from PyPI python manager
+uv pip install solo-cli
 ```
 
-## 💻 Solo Tech Installation Demo
+## 💻 Solo Tech Installation Demo 
 
 <p align="center">
   <img src="media/SoloTechInstallationGIF.gif" alt="Solo Tech Installation Demo" width="600" height="450">
 </p>
 
-**For the full installation demo, [click here to watch on YouTube](https://www.youtube.com/embed/x2pVuYr08vk).** 
+**To see the full video, [click here to watch on YouTube](https://www.youtube.com/watch?v=x2pVuYr08vk).**
 
-## Quick Installation for Mac (Automated)
-
-For Mac users, we provide an automated installation script that handles all the setup steps:
-
-```bash
-# Clone the repository
-git clone https://github.com/GetSoloTech/solo-cli.git
-cd solo-cli
-
-# Make the installation script executable
-chmod +x install_mac.sh
-
-# Run the automated installation
-./install_mac.sh
-```
-
-The script will automatically:
-- Install uv package manager (version 0.9.3)
-- Create a virtual environment with Python 3.12.12
-- Set up environment variables for dependencies
-- Install solo-cli in development mode with fallback handling for mujoco dependencies
-
-After installation, activate the virtual environment:
-```bash
-source solo_venv/bin/activate
-```
-
-<!-- <details>
-<summary><strong>Video: quickstart installation</strong></summary>
-
-[![Video: Mac Quickstart Installation](media/MacQuickInstallThumbnail.png)](https://youtu.be/bGjaIfKvyAA)
-
-</details> -->
-
-
-## 💻 Quick Installation Demo
-
-<p align="center">
-  <img src="media/MacQuickInstallGIF.gif" alt="Mac Quickstart Installation Demo" width="600" height="450">
-</p>
-
----
-
-**To see the full video, [click here to watch on YouTube](https://www.youtube.com/watch?v=bGjaIfKvyAA).** 
 
 ## Solo Commands:
 
@@ -141,22 +93,13 @@ solo --help
 │ download   Downloads a Hugging Face model using the huggingface repo id.                                          │
 ╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 
+
 ```
-## Start server with SML models
+## Interactive CLI for Robots
+**Find more details here: [Solo Robo Docs](solo/commands/robots/lerobot/README.md)**
 
 ```bash
-
-# Note that you will need Docker for solo serve
-solo setup
-solo serve --server ollama --model llama3.2:1b
-```
-
-## Interactive Lerobot With Solo CLI
-Find more details here: [Solo Robo Documentation](solo/commands/robots/lerobot/README.md) 
-
-```bash
-# Motors (both) → Calibrate (both) → Teleop
-solo robo --motors all
+# Calibrate → Teleop
 solo robo --calibrate all
 solo robo --teleop
 
@@ -166,10 +109,10 @@ solo robo --record
 # Train ACT or SmolVLA Policy on a recorded dataset and push to Hub
 solo robo --train
 
-# Inference with a hub model id (with optional Teleop override)
+# Inference with VLA
 solo robo --inference
 
-# Replay a recorded episode
+# Replay a recorded action/episode
 solo robo --replay
 
 # Use -y or --yes to auto-use saved settings (skip prompts)
@@ -177,6 +120,15 @@ solo robo --teleop -y
 solo robo --record --yes
 ```
 
+
+## Interactive CLI for Local AI Deployment
+
+```bash
+
+# Note that you will need Docker for solo serve
+solo setup
+solo serve --server ollama --model llama3.2:1b
+```
 ## API Reference
 Find more details here: OpenAI -> [OpenAI API Docs](https://platform.openai.com/docs/api-reference/introduction) Ollama -> [Ollama API Docs](https://docs.ollama.com/api)
 
