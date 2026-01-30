@@ -26,7 +26,7 @@ setup(
         "rich",
         "huggingface_hub",
         "pydantic",
-        # "lerobot[feetech,dynamixel,realman]>=0.4.0,<0.5.0",  # Install lerobot separately from local source
+        "lerobot[feetech,dynamixel] @ git+https://github.com/zeeshaan-ai/lerobot.git",
         "transformers",
         "accelerate",
         "num2words"
