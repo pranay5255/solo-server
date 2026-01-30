@@ -3,8 +3,79 @@ Camera utilities for LeRobot
 """
 
 import typer
-from typing import List, Dict
+from typing import List, Dict, Optional
 from rich.prompt import Prompt
+
+
+def validate_camera_accessible(camera_index: int, timeout_ms: int = 3000) -> bool:
+    """
+    Test if a camera can actually be opened and read from.
+    Returns True if camera is accessible, False otherwise.
+    """
+    try:
+        import cv2
+        import time
+        
+        cap = cv2.VideoCapture(camera_index)
+        if not cap.isOpened():
+            return False
+        
+        # Try to read a frame
+        ret, frame = cap.read()
+        cap.release()
+        
+        # Give the camera time to fully release
+        time.sleep(0.5)
+        
+        return ret and frame is not None
+    except Exception as e:
+        typer.echo(f"⚠️  Error testing camera {camera_index}: {e}")
+        return False
+
+
+def validate_cameras_before_recording(camera_config: Dict) -> tuple[bool, List[str]]:
+    """
+    Validate all configured cameras are accessible before starting recording.
+    Returns (all_valid, list_of_errors).
+    """
+    if not camera_config or not camera_config.get('enabled'):
+        return True, []
+    
+    cameras = camera_config.get('cameras', [])
+    if not cameras:
+        return True, []
+    
+    errors = []
+    typer.echo("\n🔍 Validating camera access...")
+    
+    for cam in cameras:
+        cam_id = cam.get('camera_id', 0)
+        cam_type = cam.get('camera_type', 'OpenCV')
+        angle = cam.get('angle', 'unknown')
+        
+        if cam_type == 'OpenCV' or cam_type == 'opencv':
+            typer.echo(f"   Testing camera {cam_id} ({angle})...", nl=False)
+            if validate_camera_accessible(cam_id):
+                typer.echo(" ✅")
+            else:
+                typer.echo(" ❌")
+                errors.append(f"Camera {cam_id} ({angle}) - Failed to open. May be in use by another application.")
+        else:
+            # For non-OpenCV cameras (RealSense, etc.), we trust the detection
+            typer.echo(f"   Camera {cam_id} ({cam_type}, {angle}) - Skipping validation (non-OpenCV)")
+    
+    if errors:
+        typer.echo("\n⚠️  Camera validation failed:")
+        for err in errors:
+            typer.echo(f"   • {err}")
+        typer.echo("\n💡 Tips:")
+        typer.echo("   • Close any apps using the camera (browser, Teams, Zoom, etc.)")
+        typer.echo("   • Kill any stuck rerun.exe processes: taskkill /IM rerun.exe /F")
+        typer.echo("   • Check if another Python process is using the camera")
+        return False, errors
+    
+    typer.echo("✅ All cameras validated successfully!\n")
+    return True, []
 
 
 def find_cameras_by_type(camera_class, camera_type_name: str) -> List[Dict]:

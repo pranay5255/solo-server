@@ -16,6 +16,7 @@ setup(
     include_package_data=True,
     package_data={
         "solo.config": ["*.yaml"],
+        "solo.udev": ["*.rules"],
     },
     install_requires=[
         "typer",
@@ -25,7 +26,7 @@ setup(
         "rich",
         "huggingface_hub",
         "pydantic",
-        "lerobot[feetech]==0.4.0",
+        "lerobot[feetech,dynamixel] @ git+https://github.com/zeeshaan-ai/lerobot.git",
         "transformers",
         "accelerate",
         "num2words"

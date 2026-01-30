@@ -1,0 +1,98 @@
+# RealMan Robot Configuration for Solo CLI
+# ==========================================
+# 
+# This file configures the RealMan robotic arm for use with Solo CLI.
+# RealMan robots (R1D2, RM65, RM75, etc.) connect via network (IP/port)
+# rather than USB serial.
+#
+# For teleoperation, a SO101 leader arm is used to control the RealMan follower.
+
+robot:
+  # Network connection settings
+  ip: "192.168.10.18"    # Robot IP address (check your network settings)
+  port: 8080            # Robot port (default: 8080)
+  
+  # Robot model: R1D2, RM65, RM75, RML63, ECO65, GEN72
+  model: "R1D2"
+
+control:
+  # Control mode: cartesian or joint
+  mode: "cartesian"
+  
+  # Motion velocity (1-100) - higher values for more responsive teleoperation
+  velocity: 80
+  
+  # Control loop update rate in Hz
+  update_rate: 100
+
+limits:
+  # Maximum velocities for safety
+  max_linear_velocity: 0.5    # m/s for Cartesian moves
+  max_angular_velocity: 1.0   # rad/s for Cartesian moves
+  max_joint_velocity: 30.0    # deg/s per joint
+  
+  # Maximum relative target per step (degrees)
+  # Limits how far the arm can move in a single control step
+  max_relative_target: 30.0
+  
+  # Workspace limits (meters from base)
+  workspace:
+    x_min: -0.7
+    x_max: 0.7
+    y_min: -0.7
+    y_max: 0.7
+    z_min: 0.0
+    z_max: 1.0
+
+safety:
+  # Safety features
+  enable_deadman: true              # Require enable button to be held
+  enable_collision_detection: true  # Enable collision detection
+  collision_level: 3                # Collision sensitivity (0-8, higher = more sensitive)
+  emergency_stop_enabled: true      # Enable emergency stop button
+  
+  # Limit enforcement
+  enable_velocity_limits: true
+  enable_workspace_limits: true
+  enforce_joint_limits: true
+  
+  # Minimum Z position for end effector (meters)
+  # Set to prevent the arm from going below a certain height (e.g., table surface)
+  # Example: 0.05 = 5cm above robot base, null = disabled
+  min_z_position: null
+  
+  # Action when Z limit is reached: "clamp" (hold position) or "reject" (block command)
+  z_limit_action: "clamp"
+
+gripper:
+  # Gripper settings (if equipped)
+  speed: 500      # Gripper speed (1-1000)
+  force: 500      # Gripper force (1-1000)
+
+# Joint configuration for R1D2 (6 DOF)
+# These are the default joint limits - adjust if needed
+joint_limits:
+  joint_1: [-178.0, 178.0]    # shoulder_pan
+  joint_2: [-130.0, 130.0]    # shoulder_lift
+  joint_3: [-135.0, 135.0]    # elbow_flex
+  joint_4: [-178.0, 178.0]    # fixed during SO101 teleoperation
+  joint_5: [-128.0, 128.0]    # wrist_flex
+  joint_6: [-360.0, 360.0]    # wrist_roll
+  gripper: [1.0, 1000.0]      # gripper range
+
+# Joint 4 fixed position during SO101 teleoperation
+# When using SO101 (5-joint) to control R1D2 (6-joint),
+# joint 4 is held at this fixed position
+fixed_joint_4_position: 0.0
+
+# Invert joint mappings
+# Set to true for joints that rotate in the opposite direction from SO101
+# Adjust these based on your calibration and teleoperation behavior
+invert_joints:
+  joint_1: true     # shoulder_pan
+  joint_2: true     # shoulder_lift
+  joint_3: true     # elbow_flex
+  # joint_4 is not mapped (fixed position)
+  joint_5: true     # wrist_flex
+  joint_6: true     # wrist_roll
+
