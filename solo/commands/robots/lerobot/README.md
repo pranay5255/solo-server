@@ -1,6 +1,10 @@
-## LeRobot with Solo CLI:
+## Interactive CLI for Robots:
+
+
 
 Use `solo robo` command to run a complete robotics workflow with LeRobot: motor setup, calibration, teleoperation, data recording, training, inference, and replay.
+
+To install solo-cli, follow our [installation guide](https://github.com/GetSoloTech/solo-cli)
 
 ### Quick start
 
