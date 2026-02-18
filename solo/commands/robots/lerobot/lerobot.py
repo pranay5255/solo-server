@@ -11,8 +11,8 @@ console = Console()
 
 def handle_lerobot(config: dict, calibrate: str, motors: str, teleop: bool, record: bool, train: bool, inference: bool = False, replay: bool = False, auto_use: bool = False, replay_options: dict = None):
     """Handle LeRobot framework operations"""
-    # Only import lerobot for operations that actually need it (training, inference, etc.)
-    # Motor setup and calibration don't need the full lerobot library
+    # Import lerobot for operations that need it immediately at top level
+    # Calibration and motor setup do lazy imports with loading spinners
     needs_lerobot = train or record or inference or replay or teleop
     
     if needs_lerobot:
@@ -53,21 +53,13 @@ def teleop_mode(config: dict, auto_use: bool = False):
     # Lazy import - only load when teleop is actually used
     from solo.commands.robots.lerobot.teleoperation import teleoperation
 
-    typer.echo("🎮 Starting LeRobot teleoperation mode...")
-        
-    # Start teleoperation
-    success = teleoperation(config, auto_use)
-    if success:
-        typer.echo("✅ Teleoperation completed.")
-    else:
-        typer.echo("❌ Teleoperation failed.")
+    # teleoperation() prints its own status messages (success/failure/stopped)
+    teleoperation(config, auto_use)
 
 def calibration_mode(config: dict, arm_type: str = None):
     """Handle LeRobot calibration mode"""
     # Lazy import - only load when calibration is actually used
     from solo.commands.robots.lerobot.calibration import calibration, check_calibration_success
-    
-    typer.echo("🔧 Starting LeRobot calibration mode...")
     
     # calibration() saves config internally, no need to save again
     arm_config = calibration(config, arm_type)
@@ -78,11 +70,15 @@ def calibration_mode(config: dict, arm_type: str = None):
 def motor_setup_mode(config: dict, arm_type: str = None):
     """Handle LeRobot motor setup mode"""
     from solo.commands.robots.lerobot.calibration import setup_motors_for_arm, setup_motors_for_bimanual_arm
+    from solo.commands.robots.lerobot.utils.preload import start_lerobot_preload
     from solo.commands.robots.lerobot.ports import detect_arm_port, detect_bimanual_arm_ports
     from solo.commands.robots.lerobot.config import save_lerobot_config, is_bimanual_robot
     from rich.prompt import Prompt, Confirm
     
-    typer.echo("🔧 Starting LeRobot motor setup mode...")
+    # Start loading heavy lerobot libraries in the background while user answers prompts
+    start_lerobot_preload()
+    
+    typer.echo("🔧 Starting motor setup mode...")
 
     if arm_type is not None and arm_type not in ["leader", "follower", "all"]:
         raise ValueError(f"Invalid arm type: {arm_type}, please use 'leader', 'follower', or 'all'")
@@ -178,11 +174,6 @@ def motor_setup_mode(config: dict, arm_type: str = None):
                 # Setup motor IDs for SO101 leader
                 leader_motors_setup = setup_motors_for_arm("leader", leader_port, "so101")
                 motor_config['leader_motors_setup'] = leader_motors_setup
-                
-                if leader_motors_setup:
-                    typer.echo("✅ SO101 leader arm motor setup completed!")
-                else:
-                    typer.echo("❌ SO101 leader arm motor setup failed.")
         
         if setup_follower:
             # Setup RealMan follower arm (network)
@@ -237,11 +228,6 @@ def motor_setup_mode(config: dict, arm_type: str = None):
                 # Setup motor IDs for bimanual leader arms
                 leader_motors_setup = setup_motors_for_bimanual_arm("leader", left_leader_port, right_leader_port, robot_type)
                 motor_config['leader_motors_setup'] = leader_motors_setup
-                
-                if leader_motors_setup:
-                    typer.echo("✅ Bimanual leader arms motor setup completed!")
-                else:
-                    typer.echo("❌ Bimanual leader arms motor setup failed.")
         
         if setup_follower:
             left_follower_port = existing_left_follower_port if reuse_all and existing_left_follower_port else None
@@ -263,11 +249,6 @@ def motor_setup_mode(config: dict, arm_type: str = None):
                 # Setup motor IDs for bimanual follower arms
                 follower_motors_setup = setup_motors_for_bimanual_arm("follower", left_follower_port, right_follower_port, robot_type)
                 motor_config['follower_motors_setup'] = follower_motors_setup
-                
-                if follower_motors_setup:
-                    typer.echo("✅ Bimanual follower arms motor setup completed!")
-                else:
-                    typer.echo("❌ Bimanual follower arms motor setup failed.")
     
     else:
         # Single-arm motor setup workflow
@@ -287,11 +268,6 @@ def motor_setup_mode(config: dict, arm_type: str = None):
                 # Setup motor IDs for leader arm
                 leader_motors_setup = setup_motors_for_arm("leader", leader_port, robot_type)
                 motor_config['leader_motors_setup'] = leader_motors_setup
-                
-                if leader_motors_setup:
-                    typer.echo("✅ Leader arm motor setup completed!")
-                else:
-                    typer.echo("❌ Leader arm motor setup failed.")
         
         if setup_follower:
             # Use consolidated decision for follower port
@@ -309,11 +285,6 @@ def motor_setup_mode(config: dict, arm_type: str = None):
                 # Setup motor IDs for follower arm
                 follower_motors_setup = setup_motors_for_arm("follower", follower_port, robot_type)
                 motor_config['follower_motors_setup'] = follower_motors_setup
-                
-                if follower_motors_setup:
-                    typer.echo("✅ Follower arm motor setup completed!")
-                else:
-                    typer.echo("❌ Follower arm motor setup failed.")
     
     # Save final motor configuration
     save_lerobot_config(config, motor_config)
@@ -323,15 +294,6 @@ def motor_setup_mode(config: dict, arm_type: str = None):
     follower_setup = motor_config.get('follower_motors_setup', False)
     
     if (setup_leader and leader_setup) or (setup_follower and follower_setup):
-        typer.echo("\n🎉 Motor setup completed!")
-        if leader_setup and follower_setup:
-            typer.echo("✅ Motor IDs have been set up for both arms.")
-        elif leader_setup:
-            typer.echo("✅ Motor IDs have been set up for the leader arm.")
-        elif follower_setup:
-            typer.echo("✅ Motor IDs have been set up for the follower arm.")
-        
-        typer.echo("🔧 You can now run 'solo robo --calibrate all' to calibrate the arms.")
+        typer.echo("\n🔧 You can now run 'solo robo --calibrate all' to calibrate the arms.")
     else:
-        typer.echo("\n⚠️  Motor setup failed or was skipped.")
-        typer.echo("You can run 'solo robo --motors all' again to retry.")
+        typer.echo("\nRun 'solo robo --motors all' to retry.")

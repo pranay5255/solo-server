@@ -2,6 +2,7 @@
 Calibration utilities for LeRobot
 
 Note: Heavy lerobot imports are done lazily inside functions to speed up CLI startup.
+      A background preloader starts the import while the user answers prompts.
 """
 
 import typer
@@ -22,14 +23,15 @@ from solo.commands.robots.lerobot.config import (
     create_bimanual_follower_config,
 )
 from solo.commands.robots.lerobot.realman_config import load_realman_config, prompt_realman_config, test_realman_connection
+from solo.commands.robots.lerobot.utils.preload import start_lerobot_preload, wait_for_lerobot_preload
 
 def calibrate_arm(arm_type: str, port: str, robot_type: str = "so100", arm_id: Optional[str] = None) -> bool:
     """
     Calibrate a specific arm using the lerobot calibration system
     """
+    wait_for_lerobot_preload()
     from lerobot.scripts.lerobot_calibrate import calibrate, CalibrateConfig
     
-    typer.echo(f"🔧 Calibrating {arm_type} arm on port {port}...")
     try:
         # Determine the appropriate config class based on arm type and robot type
         leader_config_class, follower_config_class = get_robot_config_classes(robot_type)
@@ -45,16 +47,15 @@ def calibrate_arm(arm_type: str, port: str, robot_type: str = "so100", arm_id: O
             arm_config = follower_config_class(port=port, id=arm_id or f"{robot_type}_{arm_type}")
             calibrate_config = CalibrateConfig(robot=arm_config)
         
-        # Run calibration
-        typer.echo(f"🔧 Starting calibration for {arm_type} arm...")
-        typer.echo("⚠️  Please follow the calibration instructions that will appear.")
+        typer.echo(f"🔧 Calibrating {arm_type} arm on port {port}...")
+        typer.echo("⚠️  Please follow the calibration instructions.")
         
         calibrate(calibrate_config)
         typer.echo(f"✅ {arm_type.title()} arm calibrated successfully!")
         return True
         
     except Exception as e:
-        typer.echo(f"❌ Calibration failed for {arm_type} arm: {e}")
+        typer.echo(f"❌ {arm_type.title()} arm calibration failed: {e}")
         return False
 
 
@@ -69,7 +70,8 @@ def calibrate_realman_follower(realman_cfg: Dict, follower_id: str) -> bool:
     Returns:
         True if calibration succeeded, False otherwise
     """
-   
+    
+    wait_for_lerobot_preload()
     from lerobot.robots import make_robot_from_config
     from lerobot.robots.realman_follower import RealManFollowerConfig
     
@@ -118,16 +120,12 @@ def calibrate_bimanual_arm(
     """
     Calibrate a bimanual arm (both left and right) using the lerobot calibration system
     """
-
-    from lerobot.scripts.lerobot_calibrate import calibrate, CalibrateConfig
     
-    typer.echo(f"🔧 Calibrating bimanual {arm_type} arms...")
-    typer.echo(f"   • Left arm port: {left_port}")
-    typer.echo(f"   • Right arm port: {right_port}")
+    wait_for_lerobot_preload()
+    from lerobot.scripts.lerobot_calibrate import calibrate, CalibrateConfig
+    leader_config_class, follower_config_class = get_robot_config_classes(robot_type)
     
     try:
-        leader_config_class, follower_config_class = get_robot_config_classes(robot_type)
-        
         if leader_config_class is None or follower_config_class is None:
             typer.echo(f"❌ Unsupported robot type: {robot_type}")
             return False
@@ -152,16 +150,16 @@ def calibrate_bimanual_arm(
             )
             calibrate_config = CalibrateConfig(robot=arm_config)
         
-        typer.echo(f"🔧 Starting calibration for bimanual {arm_type} arms...")
-        typer.echo("⚠️  Please follow the calibration instructions.")
-        typer.echo("    You will calibrate LEFT arm first, then RIGHT arm.")
+        typer.echo(f"🔧 Calibrating bimanual {arm_type} arms...")
+        typer.echo(f"   • Left: {left_port}  • Right: {right_port}")
+        typer.echo("⚠️  Follow the instructions. LEFT arm first, then RIGHT.")
         
         calibrate(calibrate_config)
         typer.echo(f"✅ Bimanual {arm_type} arms calibrated successfully!")
         return True
         
     except Exception as e:
-        typer.echo(f"❌ Calibration failed for bimanual {arm_type} arms: {e}")
+        typer.echo(f"❌ Bimanual {arm_type} arms calibration failed: {e}")
         return False
 
 
@@ -171,6 +169,7 @@ def setup_motors_for_arm(arm_type: str, port: str, robot_type: str = "so100") ->
     Returns True if successful, False otherwise
     """
     
+    wait_for_lerobot_preload()
     from lerobot.teleoperators import make_teleoperator_from_config
     from lerobot.robots import make_robot_from_config
 
@@ -193,17 +192,14 @@ def setup_motors_for_arm(arm_type: str, port: str, robot_type: str = "so100") ->
         device_config = config_class(port=port, id=f"{robot_type}_{arm_type}")
         device = make_device(device_config)
         
-        # Run motor setup
-        typer.echo(f"🔧 Starting motor setup for {arm_type} arm...")
-        typer.echo("⚠️  You will be asked to connect each motor individually.")
-        typer.echo("Make sure your arm is powered on and ready.")
+        typer.echo(f"🔧 Setting up motors for {arm_type} arm — connect each motor when prompted.")
         
         device.setup_motors()
-        typer.echo(f"✅ Motor setup completed for {arm_type} arm!")
+        typer.echo(f"✅ {arm_type.title()} arm motor setup completed!")
         return True
         
     except Exception as e:
-        typer.echo(f"❌ Motor setup failed for {arm_type} arm: {e}")
+        typer.echo(f"❌ {arm_type.title()} arm motor setup failed: {e}")
         return False
 
 
@@ -218,16 +214,12 @@ def setup_motors_for_bimanual_arm(
     Returns True if successful, False otherwise
     """
     
+    wait_for_lerobot_preload()
     from lerobot.teleoperators import make_teleoperator_from_config
     from lerobot.robots import make_robot_from_config
-    
-    typer.echo(f"🔧 Setting up motors for bimanual {arm_type} arms...")
-    typer.echo(f"   • Left arm port: {left_port}")
-    typer.echo(f"   • Right arm port: {right_port}")
+    leader_config_class, follower_config_class = get_robot_config_classes(robot_type)
     
     try:
-        leader_config_class, follower_config_class = get_robot_config_classes(robot_type)
-        
         if leader_config_class is None or follower_config_class is None:
             typer.echo(f"❌ Unsupported robot type: {robot_type}")
             return False
@@ -252,16 +244,15 @@ def setup_motors_for_bimanual_arm(
             )
             device = make_robot_from_config(device_config)
         
-        typer.echo(f"🔧 Starting motor setup for bimanual {arm_type} arms...")
-        typer.echo("⚠️  You will be asked to connect each motor individually for BOTH arms.")
-        typer.echo("Make sure both arms are powered on and ready.")
+        typer.echo(f"🔧 Setting up motors for bimanual {arm_type} arms — connect each motor when prompted.")
+        typer.echo(f"   • Left: {left_port}  • Right: {right_port}")
         
         device.setup_motors()
-        typer.echo(f"✅ Motor setup completed for bimanual {arm_type} arms!")
+        typer.echo(f"✅ Bimanual {arm_type} arms motor setup completed!")
         return True
         
     except Exception as e:
-        typer.echo(f"❌ Motor setup failed for bimanual {arm_type} arms: {e}")
+        typer.echo(f"❌ Bimanual {arm_type} arms motor setup failed: {e}")
         return False
 
 
@@ -271,6 +262,9 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
     Supports both single-arm and bimanual robots
     Returns configuration dictionary with arm setup details
     """
+    # Start loading heavy lerobot libraries in the background while the user
+    start_lerobot_preload()
+    
     config = {}
 
     if arm_type is not None and arm_type not in ("leader", "follower", "all"):
@@ -409,7 +403,6 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
                     if main_config is None:
                         main_config = target_config
                 else:
-                    typer.echo("❌ Leader arm calibration failed.")
                     config['leader_calibrated'] = False
         
         # Setup RealMan follower (network) - needs calibration for joint mapping
@@ -483,7 +476,6 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
                     config['leader_id'] = leader_id
                     add_known_id(main_config or config, 'leader', leader_id, robot_type=robot_type)
                 else:
-                    typer.echo("❌ Bimanual leader arms calibration failed.")
                     config['leader_calibrated'] = False
         
         if setup_follower:
@@ -510,7 +502,6 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
                     config['follower_id'] = follower_id
                     add_known_id(main_config or config, 'follower', follower_id, robot_type=robot_type)
                 else:
-                    typer.echo("❌ Bimanual follower arms calibration failed.")
                     config['follower_calibrated'] = False
     
     else:
@@ -539,7 +530,6 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
                     config['leader_id'] = leader_id
                     add_known_id(main_config or config, 'leader', leader_id, robot_type=robot_type)
                 else:
-                    typer.echo("❌ Leader arm calibration failed.")
                     config['leader_calibrated'] = False
         
         if setup_follower:
@@ -566,7 +556,6 @@ def calibration(main_config: dict = None, arm_type: str = None) -> Dict:
                     config['follower_id'] = follower_id
                     add_known_id(main_config or config, 'follower', follower_id, robot_type=robot_type)
                 else:
-                    typer.echo("❌ Follower arm calibration failed.")
                     config['follower_calibrated'] = False
     
     return config
@@ -630,5 +619,4 @@ def check_calibration_success(arm_config: dict, setup_motors: bool = False) -> N
     elif follower_configured:
         typer.echo("✅ Follower arm calibrated successfully!")
     else:
-        typer.echo("⚠️  Calibration failed or was not completed.")
-        typer.echo("You can run 'solo robo --calibrate all' again to retry.")
+        typer.echo("Run 'solo robo --calibrate all' to retry.")
