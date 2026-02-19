@@ -16,8 +16,6 @@ from solo.commands.robots.lerobot.utils.text_cleaning import clean_ansi_codes, c
 
 def training_mode(config: dict, auto_use: bool = False):
     """Handle LeRobot training mode"""
-    typer.echo("🎓 Starting LeRobot training mode...")
-    
     # Check for preconfigured training settings
     preconfigured, detected_robot_type = use_preconfigured_args(config, 'training', 'Training', auto_use=auto_use)
     training_args = {}
@@ -43,8 +41,6 @@ def training_mode(config: dict, auto_use: bool = False):
         policy_type = preconfigured.get('policy_type')
         training_args = preconfigured.get('training_args', {})
         
-        typer.echo("✅ Using preconfigured training settings")
-        
         # Validate that we have the required settings
         if not dataset_repo_id:
             typer.echo("❌ Preconfigured settings missing required dataset configuration")
@@ -63,16 +59,6 @@ def training_mode(config: dict, auto_use: bool = False):
         use_wandb = training_args.get('use_wandb', True)
         wandb_project = training_args.get('wandb_project', "lerobot-training")
         
-        typer.echo(f"✅ Using preconfigured training parameters:")
-        typer.echo(f"   • Training steps: {training_steps}")
-        typer.echo(f"   • Batch size: {batch_size}")
-        typer.echo(f"   • Output directory: {output_dir}")
-        typer.echo(f"   • Push to hub: {push_to_hub}")
-        typer.echo(f"   • WandB logging: {use_wandb}")
-        if policy_repo_id:
-            typer.echo(f"   • Policy repository: {policy_repo_id}")
-        if use_wandb:
-            typer.echo(f"   • WandB project: {wandb_project}")
     else:
         # Get default dataset from recording config if available
         recording_config = load_mode_config(config, 'recording')
@@ -197,9 +183,6 @@ def training_mode(config: dict, auto_use: bool = False):
                 typer.echo(f"❌ Error during WandB login: {e}")
                 typer.echo("Continuing without WandB logging.")
                 use_wandb = False
-    
-    # Debug: Log the final dataset_repo_id before training
-    typer.echo(f"🔍 Debug - Final dataset_repo_id for training: '{dataset_repo_id}'")
     
     # Check if dataset exists locally
     if check_dataset_exists(dataset_repo_id):
@@ -436,27 +419,14 @@ def training_mode(config: dict, auto_use: bool = False):
         typer.echo("   • Checkpoints will be saved to the output directory")
         typer.echo("   • Press Ctrl+C to stop training early")
         
-        # Add progress tracking
-        typer.echo(f"\n📊 Training Progress:")
-        typer.echo(f"   • Total steps: {training_steps}")
-        typer.echo(f"   • Batch size: {batch_size}")
-        typer.echo(f"   • Estimated time: {training_steps * batch_size / 1000:.1f} minutes")
-        
-        # Start training with progress tracking
         typer.echo(f"\n🚀 Starting training at step 0/{training_steps}...")
-        typer.echo("📈 Progress will be shown in the console output below...")
         train(train_config)
         
-        typer.echo(f"✅ Training completed!")
-        typer.echo(f"📊 Dataset: {dataset_repo_id}")
-        typer.echo(f"🤖 Policy: {policy_name}")
+        typer.echo(f"\n✅ Training completed!")
         typer.echo(f"💾 Checkpoints saved to: {output_dir}")
         
         if push_to_hub and policy_repo_id:
             typer.echo(f"🚀 Model pushed to HuggingFace Hub: https://huggingface.co/{policy_repo_id}")
-        
-        if use_wandb:
-            typer.echo(f"📈 Training logs: https://wandb.ai/{wandb_project}")
         
         
     except KeyboardInterrupt:

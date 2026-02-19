@@ -86,8 +86,6 @@ def _find_latest_local_model() -> str | None:
 
 def inference_mode(config: dict, auto_use: bool = False):
     """Handle LeRobot inference mode"""
-    typer.echo("🔮 Starting LeRobot inference mode...")
-    
     # Check for preconfigured inference settings
     preconfigured, detected_robot_type = use_preconfigured_args(config, 'inference', 'Inference', auto_use=auto_use)
 
@@ -112,8 +110,6 @@ def inference_mode(config: dict, auto_use: bool = False):
         # Get calibration status from config for preconfigured settings
         leader_calibrated = config.get('lerobot', {}).get('leader_calibrated', False)
         follower_calibrated = config.get('lerobot', {}).get('follower_calibrated', False)
-        
-        typer.echo("✅ Using preconfigured inference settings")
         
         # Check if policy_path is a local path
         if policy_path:
@@ -244,11 +240,8 @@ def inference_mode(config: dict, auto_use: bool = False):
     try:
         # Set up Windows-specific environment variables for HuggingFace Hub
         os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING'] = '1'
-        typer.echo(f"📥 Loading model: {policy_path}")
 
-        # Step 4: Start inference
-        typer.echo("\n🔮 Step 4: Starting Inference")
-        typer.echo("Configuration:")
+        typer.echo("\n🔮 Starting Inference")
         typer.echo(f"   • Policy: {policy_path}")
         typer.echo(f"   • Inference duration: {inference_time}s")
         typer.echo(f"   • Task: {task_description or 'Not specified'}")
@@ -271,8 +264,6 @@ def inference_mode(config: dict, auto_use: bool = False):
             use_teleoperation=use_teleoperation,
         )
         
-        typer.echo("✅ Policy and robot configuration loaded successfully!")
-        typer.echo("🔮 Starting inference... Follow the robot's movements.")
         typer.echo("💡 Tips:")
         if use_teleoperation:
             typer.echo("   • The robot will execute the policy autonomously")

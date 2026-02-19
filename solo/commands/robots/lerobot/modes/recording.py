@@ -48,8 +48,6 @@ def cleanup_rerun():
 
 def recording_mode(config: dict, auto_use: bool = False):
     """Handle LeRobot recording mode"""
-    typer.echo("🎬 Starting LeRobot recording mode...")
-    
     # Check for preconfigured recording settings
     preconfigured, detected_robot_type = use_preconfigured_args(config, 'recording', 'Recording', auto_use=auto_use)
     
@@ -291,19 +289,13 @@ def recording_mode(config: dict, auto_use: bool = False):
         save_recording_config(config, recording_args)
 
     # Step 3: Start recording
-    typer.echo("\n🎬Starting Data Recording")
-    typer.echo("Configuration:")
+    typer.echo("\n🎬 Starting Data Recording")
     typer.echo(f"   • Dataset: {dataset_repo_id}")
     typer.echo(f"   • Task: {task_description}")
     typer.echo(f"   • Episode duration: {episode_time}s")
     typer.echo(f"   • Number of episodes: {num_episodes}")
     typer.echo(f"   • Push to hub: {push_to_hub}")
     typer.echo(f"   • Robot type: {robot_type.upper()}")
-    try:
-        typer.echo(f"   • Leader id: {leader_id}")
-        typer.echo(f"   • Follower id: {follower_id}")
-    except NameError:
-        pass
     
     # Import lerobot recording components
     from lerobot.scripts.lerobot_record import record
@@ -347,11 +339,8 @@ def recording_mode(config: dict, auto_use: bool = False):
         
         record_config = unified_record_config(**record_config_kwargs)
         
-        mode_text = "Resuming" if should_resume else "Starting"
-        typer.echo(f"🎬 {mode_text} recording... Follow the on-screen instructions.")
-        
         if should_resume:
-            typer.echo("📝 Note: Recording will continue from existing dataset")
+            typer.echo("📝 Resuming — recording will continue from existing dataset")
         
         # Display keyboard shortcuts in a prominent panel
         from rich.console import Console

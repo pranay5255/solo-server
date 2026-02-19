@@ -23,8 +23,6 @@ from solo.commands.robots.lerobot.utils.text_cleaning import clean_ansi_codes
 
 def replay_mode(config: dict, auto_use: bool = False, replay_options: dict = None):
     """Handle LeRobot replay mode - replay actions from a recorded dataset episode"""
-    typer.echo("🔄 Starting LeRobot replay mode...")
-    
     # Check if CLI arguments were provided (non-interactive mode)
     if replay_options and replay_options.get('dataset'):
         # Use CLI arguments
